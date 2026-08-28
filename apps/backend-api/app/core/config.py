@@ -31,6 +31,19 @@ class Settings:
     LIMIAR_BAIXA_PRESENCA: int = _int("LIMIAR_BAIXA_PRESENCA", 60)
     CATRACA_TIMEOUT_S: int = _int("CATRACA_TIMEOUT_S", 900)
 
+    # --- Estado compartilhado ---------------------------------------------
+    # Vazio => estado em memoria (instancia unica, comportamento padrao).
+    # Definido => estado e broadcast via Redis, permitindo varias instancias
+    # e deploy serverless (Vercel Functions).
+    REDIS_URL: str = os.getenv("REDIS_URL", "") or os.getenv("KV_URL", "")
+
+    # Protege o endpoint de cron que dispara a reconciliacao.
+    CRON_SECRET: str = os.getenv("CRON_SECRET", "")
+
+    # Loops de fundo (reconciliacao + resync do JACAD). Em serverless nao ha
+    # processo entre requisicoes: desligue e use o Vercel Cron.
+    LOOP_INTERNO: bool = _bool("LOOP_INTERNO", not bool(os.getenv("VERCEL")))
+
     # --- Tempo real --------------------------------------------------------
     TICK_DASHBOARD_S: int = _int("TICK_DASHBOARD_S", 5)
     SIMULADOR_ATIVO: bool = _bool("SIMULADOR_ATIVO", True)

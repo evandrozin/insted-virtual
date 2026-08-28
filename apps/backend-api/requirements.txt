@@ -1,6 +1,13 @@
-# Python 3.11+ (validado em 3.14). Versoes minimas: use pip install -r requirements.txt
+# Python 3.11+ (validado em 3.14). pip install -r requirements.txt
 fastapi>=0.115
-uvicorn[standard]>=0.34
+uvicorn[standard]>=0.49
 pydantic>=2.10
 httpx>=0.28
 websockets>=14.0
+
+# Estado compartilhado entre instancias (obrigatorio quando REDIS_URL existe;
+# sem ele o sistema roda em memoria e este pacote fica ocioso).
+redis>=5.0
+
+# Somente para os testes: emula um servidor Redis em processo.
+# fakeredis>=2.30

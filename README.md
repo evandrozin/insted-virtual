@@ -19,7 +19,7 @@ O motor cruza três fontes e projeta o resultado em uma única visão:
 |---|---|---|
 | **JACAD** (ERP acadêmico) | matrículas, turmas, grade horária, professor, sala | sync a cada 15 min |
 | **Catracas** | passagens de entrada/saída por RA | evento a evento (tempo real) |
-| **Maquete 3D** | topologia dos 4 pavimentos, salas e 921 carteiras | estático (seed) |
+| **Maquete 3D** | topologia dos 4 pavimentos, 63 ambientes e 2.742 lugares | estático (seed) |
 
 ### Ciclo de vida de uma carteira
 
@@ -158,12 +158,15 @@ sozinho com *backoff* exponencial (1 s → 15 s).
 apps/
 ├── backend-api/                     FastAPI + motor de presença
 │   ├── app/
-│   │   ├── api/v1/
-│   │   │   ├── academico.py         espelho do JACAD
-│   │   │   ├── alocacao.py          realocação manual de turmas
-│   │   │   ├── catracas.py          ingestão de passagens
-│   │   │   ├── presenca.py          leitura: maquete, dashboard, drill-down
-│   │   │   └── ws.py                WebSockets (/ws/campus, /ws/catracas)
+│   │   ├── api/
+│   │   │   ├── index.py             entry point das Vercel Functions
+│   │   │   └── v1/
+│   │   │       ├── academico.py     espelho do JACAD
+│   │   │       ├── alocacao.py      realocação manual de turmas
+│   │   │       ├── catracas.py      ingestão de passagens
+│   │   │       ├── cron.py          reconciliação disparada por Vercel Cron
+│   │   │       ├── presenca.py      leitura: maquete, dashboard, drill-down
+│   │   │       └── ws.py            WebSockets (/ws/campus, /ws/catracas)
 │   │   ├── core/
 │   │   │   ├── config.py            configuração por ambiente
 │   │   │   └── clock.py             relógio real ou ancorado (demo)
@@ -174,10 +177,17 @@ apps/
 │   │   │   ├── campus_state.py      estado único do processo
 │   │   │   ├── dashboard_service.py projeção de leitura da diretoria
 │   │   │   ├── jacad_client.py      adapter do ERP (REST | mock)
-│   │   │   └── realtime.py          hub de broadcast
-│   │   ├── data/campus_seed.py      4 pavimentos, 26 salas, 921 carteiras
+│   │   │   ├── realtime.py          hub de broadcast + relay do pub/sub
+│   │   │   └── store/               estado compartilhado (memória | Redis)
+│   │   │       ├── base.py          contrato EstadoStore
+│   │   │       ├── memoria.py       instância única (padrão)
+│   │   │       └── redis_store.py   várias instâncias / serverless
+│   │   ├── data/campus_seed.py      planta real: 4 pavimentos, 63 ambientes
 │   │   └── simulator/               gerador de fluxo de catracas
-│   └── smoke_test.py                valida o fluxo ponta a ponta
+│   ├── smoke_test.py                fluxo ponta a ponta (memória)
+│   ├── redis_test.py                store Redis + pub/sub entre instâncias
+│   ├── redis_e2e_test.py            app completa sobre Redis
+│   └── vercel.json                  functions, rewrites e crons
 └── web-3d-frontend/                 React + Three.js + painel
     └── src/
         ├── components/
@@ -203,7 +213,7 @@ dicionário plano `cadeira_id → status`, então aplicar um delta é O(1) e nã
 re-cria a árvore de pavimentos/salas.
 
 **Por que as carteiras são instanciadas.**
-São 921 carteiras. Renderizadas como *meshes* individuais seriam ~2.700 objetos.
+São 2.742 carteiras. Renderizadas como *meshes* individuais seriam ~8.200 objetos.
 Com `Instances` do drei, o campus inteiro sai em 3 *draw calls*.
 
 **Por que sobrelotação não lança exceção.**
@@ -216,7 +226,53 @@ O store descarta eventos com `id` já conhecido.
 
 ---
 
-## 7. Verificação
+## 7. Deploy
+
+### Estado compartilhado
+
+Sem `REDIS_URL` o sistema roda em memória, em instância única — é o padrão e o
+modo de desenvolvimento. Com `REDIS_URL` definido, presenças, campus, feed,
+alertas, série e contadores passam ao Redis, e o broadcast entre instâncias
+usa pub/sub. **A regra de negócio não muda**: os dois caminhos são validados
+pelo mesmo roteiro de testes e produzem resultado idêntico.
+
+Nem tudo precisou ir para o Redis. Topologia (vem do seed), espelho do JACAD
+(vem do sync), alocação de carteiras (função pura da ordem das cadeiras e da
+lista da turma) e janela de aulas (derivada do relógio) são **determinísticos**:
+cada instância os reconstrói igual. Só o que muda a cada passagem é compartilhado.
+
+### Vercel
+
+O backend roda em Vercel Functions — a plataforma suporta WebSocket com FastAPI
+sobre ASGI desde junho de 2026. `vercel.json` e `api/index.py` já estão prontos.
+
+1. Crie o projeto apontando para `apps/backend-api`.
+2. Adicione Redis pelo Marketplace (injeta `REDIS_URL`).
+3. Defina `SIMULADOR_ATIVO=false` e um `CRON_SECRET`.
+4. O frontend vai em um segundo projeto, com `VITE_API_URL` e `VITE_WS_URL`
+   apontando para o domínio do backend.
+
+Três pontos de atenção:
+
+- **A conexão cai no `maxDuration`** (Hobby 300 s; Pro 800 s, configurado no
+  `vercel.json`). O painel reconecta sozinho com *backoff* e recebe o snapshot
+  inteiro no handshake, então o usuário não percebe.
+- **Não há processo de fundo entre requisições.** `LOOP_INTERNO` é desligado
+  automaticamente na Vercel e a reconciliação passa a vir do Cron. O agendamento
+  de 1 em 1 minuto do `vercel.json` **exige plano Pro** — no Hobby, cron roda
+  uma vez por dia.
+- **O simulador não faz sentido em serverless.** Mantenha `SIMULADOR_ATIVO=false`
+  em produção; ele é ferramenta de demonstração.
+
+### Alternativa com processo contínuo
+
+Render, Railway ou um container: nada precisa mudar. Sem `REDIS_URL` o
+`LOOP_INTERNO` cuida da reconciliação a cada 5 s e o simulador funciona, o que
+mantém o modo de apresentação intacto.
+
+---
+
+## 8. Verificação
 
 ```bash
 cd apps/backend-api
@@ -228,6 +284,17 @@ passagem na catraca promovendo a carteira a `OCUPADA` → rastreio do aluno na
 maquete → saída caracterizando evasão → KPIs → handshake do WebSocket →
 realocação de turma.
 
+Para o caminho com estado compartilhado (usa `fakeredis`, não precisa de servidor):
+
+```bash
+pip install fakeredis && python redis_test.py && python redis_e2e_test.py
+```
+
+O primeiro valida o store e o pub/sub entre duas instâncias; o segundo sobe a
+aplicação inteira sobre Redis e repete o fluxo do smoke, provando que o
+resultado é idêntico ao modo memória. Ambos aceitam `REDIS_URL` para rodar
+contra um servidor real.
+
 ```bash
 cd apps/web-3d-frontend
 npx tsc --noEmit && npm run build
@@ -235,12 +302,12 @@ npx tsc --noEmit && npm run build
 
 ---
 
-## 8. Limitações conhecidas
+## 9. Limitações conhecidas
 
-- **Estado em memória.** O `CampusState` vive no processo. Reiniciar a API
-  zera a presença do dia. Para produção com múltiplas réplicas, o próximo passo
-  é persistir os `RegistroPresenca` (Postgres) e mover o broadcast para Redis
-  pub/sub.
+- **Estado volátil.** Com Redis o estado sobrevive ao reinício da API e é
+  compartilhado entre instâncias, mas as chaves expiram em 20 h: é o estado do
+  dia letivo, não histórico. Para relatórios de frequência ao longo do semestre
+  ainda falta persistir os `RegistroPresenca` encerrados em Postgres.
 - **Comparativo com o dia anterior.** O campo `taxa_presenca_variacao` já
   circula na API, mas o `baseline_ontem` só será preenchido quando houver
   histórico persistido — hoje ele exibe `— vs ontem`.

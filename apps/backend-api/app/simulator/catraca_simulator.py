@@ -21,7 +21,8 @@ from app.models.academico import EventoCatraca
 from app.models.enums import DirecaoCatraca
 from app.services.campus_state import estado
 from app.services.presence_engine import motor
-from app.services.realtime import manager
+from app.services.realtime import difundir
+from app.services.store import obter_store
 
 # Distribuicao de comportamento por aluno.
 P_FALTA = 0.11          # nao aparece
@@ -129,17 +130,18 @@ class SimuladorCatracas:
                 agora = clock.agora()
                 self.planejar_aulas_abertas(agora)
 
+                store = obter_store()
                 for momento, ra, catraca, direcao in self._vencidos(agora)[:rajada]:
-                    if direcao == DirecaoCatraca.ENTRADA and ra in estado.alunos_no_campus:
+                    if direcao == DirecaoCatraca.ENTRADA and await store.esta_no_campus(ra):
                         continue  # ja esta no campus (aulas consecutivas)
 
-                    resultado = motor.processar_evento(
+                    resultado = await motor.processar_evento(
                         EventoCatraca(
                             ra=ra, catraca_id=catraca,
                             direcao=direcao, timestamp=agora,
                         )
                     )
-                    await manager.broadcast(resultado)
+                    await difundir(resultado)
                     if espacamento:
                         await asyncio.sleep(espacamento)
 
@@ -154,9 +156,10 @@ class SimuladorCatracas:
         self._rodando = False
 
     # ------------------------------------------------------------------
-    def semear_campus(self, agora: datetime, proporcao: float = 0.55) -> int:
+    async def semear_campus(self, agora: datetime, proporcao: float = 0.55) -> int:
         """Popula o campus no boot para a maquete nao abrir vazia."""
         self.planejar_aulas_abertas(agora)
+        store = obter_store()
         disparados = 0
 
         atrasados = [item for item in self._agenda if item[0] <= agora]
@@ -165,9 +168,9 @@ class SimuladorCatracas:
         for momento, ra, catraca, direcao in atrasados:
             if direcao == DirecaoCatraca.ENTRADA and self._rng.random() > proporcao:
                 continue
-            if direcao == DirecaoCatraca.ENTRADA and ra in estado.alunos_no_campus:
+            if direcao == DirecaoCatraca.ENTRADA and await store.esta_no_campus(ra):
                 continue
-            motor.processar_evento(
+            await motor.processar_evento(
                 EventoCatraca(ra=ra, catraca_id=catraca,
                               direcao=direcao, timestamp=momento)
             )

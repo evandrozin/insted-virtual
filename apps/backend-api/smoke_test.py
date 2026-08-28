@@ -20,6 +20,7 @@ def principal() -> int:
         # 1. Saude e status operacional
         assert client.get("/health").json()["status"] == "ok"
         status = client.get("/api/v1/status").json()
+        print(f"[0] estado compartilhado: {status['estado_compartilhado']}")
         print(f"[1] status: {status['alunos']} alunos, "
               f"{status['aulas_cadastradas']} aulas na grade, "
               f"{status['aulas_ativas']} ativas, {status['cadeiras']} cadeiras")
@@ -96,7 +97,13 @@ def principal() -> int:
             if inicial["tipo"] != "SNAPSHOT_INICIAL":
                 falhas.append("handshake do websocket sem snapshot inicial")
 
-        # 8. Realocacao de turma
+        # 8. Reconciliacao por cron (caminho serverless)
+        cron = client.post("/api/v1/cron/reconciliar").json()
+        print(f"[9] cron: {cron['aulas_ativas']} aulas ativas, "
+              f"{cron['deltas']} deltas, "
+              f"{cron['presentes_em_aula']} presentes")
+
+        # 9. Realocacao de turma
         livres = client.get("/api/v1/alocacao/salas-disponiveis?minimo=20").json()
         if livres["salas"]:
             destino = livres["salas"][0]["id"]
@@ -104,7 +111,7 @@ def principal() -> int:
                 "/api/v1/alocacao/realocar",
                 json={"turma_id": ativa["turma_id"], "sala_destino_id": destino},
             ).json()
-            print(f"[9] realocacao: {realoc['sala_origem']} -> "
+            print(f"[10] realocacao: {realoc['sala_origem']} -> "
                   f"{realoc['sala_destino']} ({realoc['alocados']} alocados)")
 
     print()

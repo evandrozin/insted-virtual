@@ -7,29 +7,35 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.v1 import academico, alocacao, catracas, presenca, ws
+from app.api.v1 import academico, alocacao, catracas, cron, presenca, ws
 from app.core import clock
 from app.core.config import settings
+from app.services.campus_state import estado
 from app.services.dashboard_service import servico_dashboard
 from app.services.presence_engine import motor
-from app.services.realtime import manager
+from app.services.realtime import difundir, iniciar_relay, manager
+from app.services.store import obter_store
 
 _tarefas: list[asyncio.Task] = []
 
 
 async def _loop_reconciliacao() -> None:
-    """Bate a grade horaria contra o relogio e empurra o tick do dashboard."""
+    """Bate a grade horaria contra o relogio e empurra o tick do dashboard.
+
+    Em serverless este loop nao sobrevive entre requisicoes: use o Vercel Cron
+    apontando para /api/v1/cron/reconciliar.
+    """
     while True:
         try:
-            deltas = motor.reconciliar()
+            deltas = await motor.reconciliar()
             payload = {
                 "tipo": "DASHBOARD_TICK",
                 "servidor_em": clock.agora(),
-                "dashboard": servico_dashboard.snapshot(),
+                "dashboard": await servico_dashboard.snapshot(),
             }
             if deltas:
                 payload["deltas"] = deltas
-            await manager.broadcast(payload)
+            await difundir(payload)
         except asyncio.CancelledError:
             raise
         except Exception as erro:
@@ -52,27 +58,56 @@ async def _loop_sync_jacad() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    resumo = motor.sincronizar_jacad()
-    print(f"[boot] JACAD carregado: {resumo}")
+    store = obter_store()
+    await store.iniciar()
+    print(f"[boot] estado compartilhado: {store.nome}")
+
+    await clock.inicializar(store)
     print(f"[boot] relogio: {clock.descricao()}")
 
-    motor.reconciliar()
+    resumo = motor.sincronizar_jacad()
+    print(f"[boot] JACAD carregado: {resumo}")
+
+    # Entrega ao painel local tudo que circula no canal (proprio ou de outra
+    # instancia); e o que mantem a projecao das carteiras alinhada.
+    await iniciar_relay()
+    await _assinar_deltas()
+
+    recuperadas = await motor.reidratar()
+    if recuperadas:
+        print(f"[boot] reidratou {recuperadas} presencas do estado compartilhado")
+
+    await motor.reconciliar()
 
     if settings.SIMULADOR_ATIVO:
         from app.simulator.catraca_simulator import simulador
 
-        semeados = simulador.semear_campus(clock.agora())
+        semeados = await simulador.semear_campus(clock.agora())
         print(f"[boot] simulador semeou {semeados} passagens")
         _tarefas.append(asyncio.create_task(simulador.rodar()))
 
-    _tarefas.append(asyncio.create_task(_loop_reconciliacao()))
-    _tarefas.append(asyncio.create_task(_loop_sync_jacad()))
+    if settings.LOOP_INTERNO:
+        _tarefas.append(asyncio.create_task(_loop_reconciliacao()))
+        _tarefas.append(asyncio.create_task(_loop_sync_jacad()))
+    else:
+        print("[boot] loops internos desligados: use /api/v1/cron/reconciliar")
 
     yield
 
     for tarefa in _tarefas:
         tarefa.cancel()
     await asyncio.gather(*_tarefas, return_exceptions=True)
+    await store.encerrar()
+
+
+async def _assinar_deltas() -> None:
+    """Aplica na projecao local os deltas publicados por qualquer instancia."""
+
+    async def aplicar(payload) -> None:
+        if isinstance(payload, dict) and payload.get("deltas"):
+            estado.aplicar_deltas(payload["deltas"])
+
+    await obter_store().assinar(aplicar)
 
 
 app = FastAPI(
@@ -82,7 +117,7 @@ app = FastAPI(
         "cruza a grade horaria do JACAD com as passagens de catraca e projeta "
         "o resultado na maquete virtual 3D."
     ),
-    version="1.0.0",
+    version="2.0.0",
     lifespan=lifespan,
 )
 
@@ -94,7 +129,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-for router in (presenca.router, catracas.router, academico.router, alocacao.router):
+for router in (
+    presenca.router, catracas.router, academico.router, alocacao.router, cron.router
+):
     app.include_router(router, prefix=settings.API_V1_PREFIX)
 
 # WebSockets ficam fora do prefixo versionado para simplificar o client.
@@ -107,6 +144,7 @@ async def health() -> dict:
         "status": "ok",
         "servico": settings.PROJECT_NAME,
         "relogio": clock.agora().isoformat(),
+        "estado": obter_store().nome,
         "simulador": settings.SIMULADOR_ATIVO,
         "paineis_conectados": manager.total,
     }

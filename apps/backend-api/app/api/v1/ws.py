@@ -8,7 +8,8 @@ from app.models.academico import EventoCatraca
 from app.services.campus_state import estado
 from app.services.dashboard_service import servico_dashboard
 from app.services.presence_engine import motor
-from app.services.realtime import manager
+from app.services.realtime import difundir, manager
+from app.services.store import obter_store
 
 router = APIRouter(tags=["tempo-real"])
 
@@ -25,8 +26,8 @@ async def websocket_campus(websocket: WebSocket) -> None:
                 "servidor_em": clock.agora(),
                 "modo_relogio": clock.descricao(),
                 "maquete": servico_dashboard.maquete(),
-                "dashboard": servico_dashboard.snapshot(),
-                "eventos": list(estado.feed_eventos)[:30],
+                "dashboard": await servico_dashboard.snapshot(),
+                "eventos": await obter_store().feed(30),
             },
         )
 
@@ -38,7 +39,7 @@ async def websocket_campus(websocket: WebSocket) -> None:
                     websocket,
                     {
                         "tipo": "DASHBOARD_TICK",
-                        "dashboard": servico_dashboard.snapshot(),
+                        "dashboard": await servico_dashboard.snapshot(),
                     },
                 )
             elif mensagem.get("acao") == "PING":
@@ -75,7 +76,7 @@ async def websocket_catracas(websocket: WebSocket) -> None:
                 )
                 continue
 
-            await manager.broadcast(motor.processar_evento(evento))
+            await difundir(await motor.processar_evento(evento))
 
     except WebSocketDisconnect:
         await manager.disconnect(websocket)

@@ -1,4 +1,12 @@
-"""Hub de tempo real: gerencia as conexoes WebSocket e o broadcast."""
+"""Hub de tempo real.
+
+Cada instancia mantem suas proprias conexoes WebSocket. Toda mensagem sai pelo
+store (`publicar`), que a devolve a *todas* as instancias - inclusive a que
+publicou - e o relay abaixo a entrega aos painels locais.
+
+Em memoria o caminho e direto; com Redis ele passa pelo canal pub/sub, e o
+painel ligado na instancia A recebe a passagem lida na instancia B.
+"""
 from __future__ import annotations
 
 import asyncio
@@ -8,8 +16,8 @@ from typing import Any, List
 from fastapi import WebSocket
 
 
-def _json_seguro(payload: Any) -> str:
-    """Serializa datetime/Enum/Pydantic sem estourar no json padrao."""
+def json_seguro(payload: Any) -> str:
+    """Serializa datetime/Enum/Pydantic/set sem estourar no json padrao."""
     from datetime import date, datetime, time
     from enum import Enum
 
@@ -45,13 +53,17 @@ class ConnectionManager:
                 self.active_connections.remove(websocket)
 
     async def send_personal(self, websocket: WebSocket, message: Any) -> None:
-        await websocket.send_text(_json_seguro(message))
+        await websocket.send_text(json_seguro(message))
 
     async def broadcast(self, message: Any) -> None:
+        """Entrega apenas as conexoes desta instancia.
+
+        Para alcancar todas as instancias use `difundir`.
+        """
         if not self.active_connections:
             return
 
-        texto = _json_seguro(message)
+        texto = message if isinstance(message, str) else json_seguro(message)
         async with self._lock:
             alvos = list(self.active_connections)
 
@@ -74,3 +86,20 @@ class ConnectionManager:
 
 
 manager = ConnectionManager()
+
+
+async def difundir(payload: Any) -> None:
+    """Envia para os painels de todas as instancias."""
+    from app.services.store import obter_store
+
+    await obter_store().publicar(payload)
+
+
+async def iniciar_relay() -> None:
+    """Liga o canal do store as conexoes locais. Chamado no boot."""
+    from app.services.store import obter_store
+
+    async def entregar(payload: Any) -> None:
+        await manager.broadcast(payload)
+
+    await obter_store().assinar(entregar)

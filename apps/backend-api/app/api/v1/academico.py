@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 from app.core import clock
 from app.services.campus_state import estado
+from app.services.store import obter_store
 
 router = APIRouter(tags=["academico"])
 
@@ -61,6 +62,7 @@ async def detalhar_turma(turma_id: str) -> dict:
     if turma is None:
         raise HTTPException(404, f"Turma nao encontrada: {turma_id}")
 
+    no_campus = await obter_store().alunos_no_campus()
     return {
         "turma": {
             "id": turma.id, "nome": turma.nome,
@@ -70,7 +72,7 @@ async def detalhar_turma(turma_id: str) -> dict:
             {
                 "ra": ra,
                 "nome": estado.alunos[ra].nome,
-                "no_campus": ra in estado.alunos_no_campus,
+                "no_campus": ra in no_campus,
             }
             for ra in turma.alunos_ra if ra in estado.alunos
         ],

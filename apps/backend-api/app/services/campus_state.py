@@ -1,31 +1,33 @@
-"""Estado central em memoria da maquete e da operacao academica.
+"""Projecao local da maquete e espelho do ERP.
 
-Toda leitura do dashboard e toda escrita vinda das catracas passam por aqui.
-Os indices sao construidos uma unica vez no boot para que o caminho quente
-(evento de catraca -> atualizacao de cadeira -> broadcast) seja O(1).
+Esta classe NAO guarda mais estado compartilhado. O que vive aqui e o que
+cada instancia consegue reconstruir sozinha, de forma identica as demais:
+
+* Topologia (pavimentos, salas, cadeiras, catracas) - vem do seed.
+* Espelho do JACAD (alunos, turmas, grade) - vem do sync periodico.
+* Status das cadeiras - projecao local, mantida em dia pelos deltas que
+  circulam no canal de tempo real e reconstruida no boot por `reidratar`.
+
+Presencas, quem esta no campus, feed, alertas, serie e contadores ficam no
+EstadoStore (memoria ou Redis).
 """
 from __future__ import annotations
 
 import threading
-from collections import deque
 from datetime import datetime
-from typing import Deque, Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set
 
-from app.core.config import settings
 from app.data.campus_seed import construir_catracas, construir_pavimentos
-from app.models.academico import AlunoModel, AulaModel, RegistroPresenca, TurmaModel
+from app.models.academico import AlunoModel, AulaModel, TurmaModel
 from app.models.campus import CadeiraModel, CatracaModel, PavimentoModel, SalaModel
-from app.models.dashboard import Alerta
-from app.models.enums import Pavimento
+from app.models.enums import Pavimento, StatusCadeira
 
 
 class CampusState:
-    """Fonte unica de verdade do processo. Protegida por lock reentrante."""
-
     def __init__(self) -> None:
         self.lock = threading.RLock()
 
-        # --- Topologia fisica ---------------------------------------------
+        # --- Topologia fisica (deterministica) -----------------------------
         self.pavimentos: List[PavimentoModel] = construir_pavimentos()
         self.catracas: Dict[str, CatracaModel] = {
             c.id: c for c in construir_catracas()
@@ -39,7 +41,7 @@ class CampusState:
                 for cadeira in sala.cadeiras:
                     self.cadeiras[cadeira.id] = cadeira
 
-        # --- Dominio academico (JACAD) -------------------------------------
+        # --- Espelho do JACAD ----------------------------------------------
         self.alunos: Dict[str, AlunoModel] = {}
         self.turmas: Dict[str, TurmaModel] = {}
         self.aulas: Dict[str, AulaModel] = {}
@@ -47,24 +49,11 @@ class CampusState:
         self.aulas_por_turma: Dict[str, List[AulaModel]] = {}
         self.ultima_sync_jacad: Optional[datetime] = None
 
-        # --- Operacao em tempo real ----------------------------------------
-        # chave: (aula_id, ra)
-        self.presencas: Dict[tuple, RegistroPresenca] = {}
+        # --- Cache local de aulas abertas (espelha o store) -----------------
         self.aulas_ativas: Set[str] = set()
-        self.alunos_no_campus: Set[str] = set()
+
+        # --- Indice cadeira <-> aluno (projecao local) ----------------------
         self.cadeira_por_aluno: Dict[str, str] = {}
-
-        self.feed_eventos: Deque[dict] = deque(maxlen=settings.MAX_EVENTOS_FEED)
-        self.alertas: Deque[Alerta] = deque(maxlen=settings.MAX_ALERTAS)
-        self.alertas_emitidos: Set[str] = set()
-
-        # Historico intradiario para o grafico da diretoria: hora -> metricas.
-        self.serie_presenca: Dict[str, dict] = {}
-        # Baseline do dia anterior por hora, para a variacao percentual.
-        self.baseline_ontem: Dict[str, float] = {}
-
-        self.total_entradas: int = 0
-        self.total_saidas: int = 0
 
     # -- carga do ERP -------------------------------------------------------
     def carregar_academico(
@@ -77,7 +66,6 @@ class CampusState:
             self.alunos = {a.ra: a for a in alunos}
             self.turmas = {t.id: t for t in turmas}
 
-            # Ignora aulas apontando para salas inexistentes na maquete.
             validas = [a for a in aulas if a.sala_id in self.salas]
             self.aulas = {a.id: a for a in validas}
 
@@ -106,27 +94,48 @@ class CampusState:
             return []
         return self.aulas_por_turma.get(aluno.turma_id, [])
 
-    def presencas_da_aula(self, aula_id: str) -> List[RegistroPresenca]:
-        return [r for (aid, _ra), r in self.presencas.items() if aid == aula_id]
+    # -- projecao das cadeiras ---------------------------------------------
+    def aplicar_delta(self, delta: dict) -> None:
+        """Aplica na projecao local um delta vindo do canal de tempo real.
 
-    # -- feed ---------------------------------------------------------------
-    def registrar_evento_feed(self, evento: dict) -> None:
-        self.feed_eventos.appendleft(evento)
+        E o que mantem as instancias com a mesma leitura da maquete sem
+        precisar reler o estado compartilhado a cada mensagem.
+        """
+        cadeira = self.cadeiras.get(delta.get("cadeira_id", ""))
+        if cadeira is None:
+            return
+        with self.lock:
+            cadeira.status = StatusCadeira(delta["status"])
+            cadeira.aluno_ra = delta.get("aluno_ra")
+            cadeira.aluno_nome = delta.get("aluno_nome")
+            if cadeira.aluno_ra:
+                self.cadeira_por_aluno[cadeira.aluno_ra] = cadeira.id
 
-    def registrar_alerta(self, alerta: Alerta, chave_dedupe: Optional[str] = None) -> bool:
-        """Adiciona o alerta; devolve False se ja havia sido emitido nesta janela."""
-        chave = chave_dedupe or alerta.id
-        if chave in self.alertas_emitidos:
-            return False
-        self.alertas_emitidos.add(chave)
-        self.alertas.appendleft(alerta)
-        return True
+    def aplicar_deltas(self, deltas: List[dict]) -> None:
+        for delta in deltas or []:
+            self.aplicar_delta(delta)
 
-    def limpar_dedupe_alertas(self, prefixos: List[str]) -> None:
-        """Libera chaves de alerta quando a condicao que as gerou deixa de existir."""
-        for chave in list(self.alertas_emitidos):
-            if any(chave.startswith(p) for p in prefixos):
-                self.alertas_emitidos.discard(chave)
+    def limpar_sala(self, sala_id: str) -> None:
+        sala = self.salas.get(sala_id)
+        if sala is None:
+            return
+        with self.lock:
+            for cadeira in sala.cadeiras:
+                if cadeira.aluno_ra:
+                    self.cadeira_por_aluno.pop(cadeira.aluno_ra, None)
+                cadeira.liberar()
+
+    def atualizar_catracas(self, estado_catracas: Dict[str, dict]) -> None:
+        """Reflete no modelo local os contadores vindos do store."""
+        with self.lock:
+            for cid, info in estado_catracas.items():
+                catraca = self.catracas.get(cid)
+                if catraca is None:
+                    continue
+                catraca.online = bool(info.get("online", True))
+                catraca.ultimo_evento_em = info.get("ultimo_evento_em")
+                catraca.total_entradas_hoje = int(info.get("entradas", 0))
+                catraca.total_saidas_hoje = int(info.get("saidas", 0))
 
 
 # Instancia unica do processo.
