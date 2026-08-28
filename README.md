@@ -187,7 +187,7 @@ apps/
 │   ├── smoke_test.py                fluxo ponta a ponta (memória)
 │   ├── redis_test.py                store Redis + pub/sub entre instâncias
 │   ├── redis_e2e_test.py            app completa sobre Redis
-│   └── vercel.json                  functions, rewrites e crons
+│   └── vercel.json                  maxDuration e crons
 └── web-3d-frontend/                 React + Three.js + painel
     └── src/
         ├── components/
@@ -243,26 +243,59 @@ cada instância os reconstrói igual. Só o que muda a cada passagem é comparti
 
 ### Vercel
 
-O backend roda em Vercel Functions — a plataforma suporta WebSocket com FastAPI
-sobre ASGI desde junho de 2026. `vercel.json` e `api/index.py` já estão prontos.
+São **dois projetos** no mesmo repositório, cada um com uma Root Directory
+diferente. Os dois usam a detecção automática da Vercel — não há entrypoint
+manual nem rewrites.
 
-1. Crie o projeto apontando para `apps/backend-api`.
-2. Adicione Redis pelo Marketplace (injeta `REDIS_URL`).
-3. Defina `SIMULADOR_ATIVO=false` e um `CRON_SECRET`.
-4. O frontend vai em um segundo projeto, com `VITE_API_URL` e `VITE_WS_URL`
-   apontando para o domínio do backend.
+**1. Painel (frontend)** — é o domínio que a diretoria abre.
+
+| Campo | Valor |
+|---|---|
+| Root Directory | `apps/web-3d-frontend` |
+| Framework | Vite (detectado) |
+
+Variáveis de ambiente, apontando para o domínio do backend:
+
+```
+VITE_API_URL = https://SEU-BACKEND.vercel.app/api/v1
+VITE_WS_URL  = wss://SEU-BACKEND.vercel.app/ws/campus
+```
+
+**2. API (backend)** — a Vercel encontra sozinha a instância `app` em
+`app/main.py`; `vercel.json` só ajusta `maxDuration` e os crons.
+
+| Campo | Valor |
+|---|---|
+| Root Directory | `apps/backend-api` |
+| Framework | FastAPI (detectado) |
+
+Variáveis de ambiente:
+
+```
+REDIS_URL       = (injetada pela integração Redis do Marketplace)
+CORS_ORIGINS    = https://SEU-PAINEL.vercel.app
+SIMULADOR_ATIVO = false
+CRON_SECRET     = (um valor aleatório qualquer)
+JACAD_MODO_MOCK = false          # quando o ERP estiver ligado
+JACAD_BASE_URL  = ...
+JACAD_TOKEN     = ...
+```
+
+> Se você já criou um projeto apontando para a **raiz** do repositório, ele
+> responde `404: NOT_FOUND` — a raiz só tem `apps/`, `docs/` e `img/`, sem nada
+> para servir. Corrija em *Settings → Build and Deployment → Root Directory*.
 
 Três pontos de atenção:
 
-- **A conexão cai no `maxDuration`** (Hobby 300 s; Pro 800 s, configurado no
+- **`REDIS_URL` é obrigatório na Vercel.** Sem ele cada instância fica com um
+  estado próprio: os painéis mostrariam números diferentes e uma passagem lida
+  numa instância não chegaria à outra.
+- **A conexão cai no `maxDuration`** (Hobby 300 s; Pro 800 s, o valor do
   `vercel.json`). O painel reconecta sozinho com *backoff* e recebe o snapshot
   inteiro no handshake, então o usuário não percebe.
-- **Não há processo de fundo entre requisições.** `LOOP_INTERNO` é desligado
-  automaticamente na Vercel e a reconciliação passa a vir do Cron. O agendamento
-  de 1 em 1 minuto do `vercel.json` **exige plano Pro** — no Hobby, cron roda
-  uma vez por dia.
-- **O simulador não faz sentido em serverless.** Mantenha `SIMULADOR_ATIVO=false`
-  em produção; ele é ferramenta de demonstração.
+- **O cron de 1 em 1 minuto exige plano Pro.** No Hobby o agendamento é diário,
+  e a reconciliação ficaria parada entre as execuções — nesse caso prefira a
+  alternativa abaixo.
 
 ### Alternativa com processo contínuo
 
