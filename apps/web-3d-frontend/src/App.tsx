@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Canvas3D } from './components/Canvas3D';
 import { FloorMap } from './components/FloorMap';
 import { ControlPanel, EventTicker, Header, RoomDrawer } from './components/ControlPanel';
@@ -13,6 +13,54 @@ const LEGENDA: Array<[string, string]> = [
   ['Sobrelotacao', COR_CADEIRA.ALERT_SOBRELOTACAO],
 ];
 
+/**
+ * Tela inicial. Se o motor de ocupacao nao responder em alguns segundos,
+ * troca o spinner por um diagnostico: sem backend o painel ficaria girando
+ * para sempre, sem dizer o que esta faltando.
+ */
+function TelaDeBoot() {
+  const conectado = useCampus3D((s) => s.conectado);
+  const [demorou, setDemorou] = useState(false);
+
+  useEffect(() => {
+    const id = window.setTimeout(() => setDemorou(true), 6000);
+    return () => window.clearTimeout(id);
+  }, []);
+
+  const destino =
+    import.meta.env.VITE_WS_URL ??
+    `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws/campus`;
+
+  if (!demorou || conectado) {
+    return (
+      <div className="boot-screen">
+        <div className="boot-ring" />
+        <div className="boot-text">Carregando a maquete virtual do campus...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="boot-screen">
+      <div className="boot-alerta">
+        <h1>Sem conexao com o motor de ocupacao</h1>
+        <p>
+          O painel esta no ar, mas nao conseguiu abrir o canal de tempo real em{' '}
+          <code>{destino}</code>.
+        </p>
+        <p>
+          Verifique se a API esta publicada e se as variaveis{' '}
+          <code>VITE_API_URL</code> e <code>VITE_WS_URL</code> apontam para o
+          dominio dela.
+        </p>
+        <span className="boot-tentando">
+          <i className="boot-ring pequeno" /> tentando reconectar...
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   useSocket();
 
@@ -23,12 +71,7 @@ export default function App() {
   const selecionarPavimento = useCampus3D((s) => s.selecionarPavimento);
 
   if (!maquete) {
-    return (
-      <div className="boot-screen">
-        <div className="boot-ring" />
-        <div className="boot-text">Carregando a maquete virtual do campus...</div>
-      </div>
-    );
+    return <TelaDeBoot />;
   }
 
   const nomePavimento =

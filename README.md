@@ -243,33 +243,32 @@ cada instância os reconstrói igual. Só o que muda a cada passagem é comparti
 
 ### Vercel
 
-São **dois projetos** no mesmo repositório, cada um com uma Root Directory
-diferente. Os dois usam a detecção automática da Vercel — não há entrypoint
-manual nem rewrites.
+O painel e a API vão em **dois projetos** do mesmo repositório.
 
-**1. Painel (frontend)** — é o domínio que a diretoria abre.
+**1. Painel (frontend)** — funciona sem configurar nada: o `vercel.json` e o
+`package.json` na raiz já dizem como construir (`npm run build`) e o que
+publicar (`apps/web-3d-frontend/dist`). Basta importar o repositório.
 
-| Campo | Valor |
-|---|---|
-| Root Directory | `apps/web-3d-frontend` |
-| Framework | Vite (detectado) |
-
-Variáveis de ambiente, apontando para o domínio do backend:
+Depois que a API existir, aponte o painel para ela:
 
 ```
 VITE_API_URL = https://SEU-BACKEND.vercel.app/api/v1
 VITE_WS_URL  = wss://SEU-BACKEND.vercel.app/ws/campus
 ```
 
-**2. API (backend)** — a Vercel encontra sozinha a instância `app` em
-`app/main.py`; `vercel.json` só ajusta `maxDuration` e os crons.
+Sem essas variáveis o painel sobe, mas mostra *"Sem conexão com o motor de
+ocupação"* com o endereço que tentou — é o comportamento esperado antes da API
+estar no ar.
+
+**2. API (backend)** — um segundo projeto, do mesmo repositório, com:
 
 | Campo | Valor |
 |---|---|
 | Root Directory | `apps/backend-api` |
-| Framework | FastAPI (detectado) |
+| Framework | FastAPI (detectado automaticamente) |
 
-Variáveis de ambiente:
+A Vercel encontra sozinha a instância `app` em `app/main.py`; o `vercel.json`
+de lá só ajusta `maxDuration` e os crons. Variáveis:
 
 ```
 REDIS_URL       = (injetada pela integração Redis do Marketplace)
@@ -281,10 +280,6 @@ JACAD_BASE_URL  = ...
 JACAD_TOKEN     = ...
 ```
 
-> Se você já criou um projeto apontando para a **raiz** do repositório, ele
-> responde `404: NOT_FOUND` — a raiz só tem `apps/`, `docs/` e `img/`, sem nada
-> para servir. Corrija em *Settings → Build and Deployment → Root Directory*.
-
 Três pontos de atenção:
 
 - **`REDIS_URL` é obrigatório na Vercel.** Sem ele cada instância fica com um
@@ -294,8 +289,8 @@ Três pontos de atenção:
   `vercel.json`). O painel reconecta sozinho com *backoff* e recebe o snapshot
   inteiro no handshake, então o usuário não percebe.
 - **O cron de 1 em 1 minuto exige plano Pro.** No Hobby o agendamento é diário,
-  e a reconciliação ficaria parada entre as execuções — nesse caso prefira a
-  alternativa abaixo.
+  e a reconciliação — que abre e encerra aulas pela grade — ficaria parada entre
+  as execuções. Nesse caso prefira a alternativa abaixo.
 
 ### Alternativa com processo contínuo
 
