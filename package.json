@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "Maquete virtual 3D e controle de presenca em tempo real do Insted",
   "scripts": {
-    "build": "npm --prefix apps/web-3d-frontend install && npm --prefix apps/web-3d-frontend run build",
+    "build": "npm --prefix apps/web-3d-frontend install --no-audit --no-fund && npm --prefix apps/web-3d-frontend run build && node scripts/copiar-dist.mjs",
     "dev": "npm --prefix apps/web-3d-frontend run dev"
   }
 }
