@@ -1,0 +1,6 @@
+# Python 3.11+ (validado em 3.14). Versoes minimas: use pip install -r requirements.txt
+fastapi>=0.115
+uvicorn[standard]>=0.34
+pydantic>=2.10
+httpx>=0.28
+websockets>=14.0

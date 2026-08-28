@@ -1,0 +1,10 @@
+# Normaliza fim de linha: o repositorio guarda LF e o Windows recebe CRLF
+# no checkout, evitando que o repo inteiro apareca como modificado.
+* text=auto eol=lf
+
+*.ps1 text eol=crlf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.pdf binary

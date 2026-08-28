@@ -1,0 +1,251 @@
+# Insted Virtual Campus — Controle de Presença em Tempo Real
+
+Maquete virtual 3D do campus do **Insted Centro Universitário** ligada ao fluxo
+real de catracas e à grade horária do **JACAD**. Cada carteira da maquete
+representa um aluno concreto; a cor da carteira muda no instante em que ele
+passa na catraca.
+
+> **Pergunta que o sistema responde para a diretoria:**
+> *"Neste momento, quem deveria estar em aula, quem está, onde, e o que precisa
+> da minha atenção?"*
+
+---
+
+## 1. Como funciona
+
+O motor cruza três fontes e projeta o resultado em uma única visão:
+
+| Fonte | O que traz | Frequência |
+|---|---|---|
+| **JACAD** (ERP acadêmico) | matrículas, turmas, grade horária, professor, sala | sync a cada 15 min |
+| **Catracas** | passagens de entrada/saída por RA | evento a evento (tempo real) |
+| **Maquete 3D** | topologia dos 4 pavimentos, salas e 921 carteiras | estático (seed) |
+
+### Ciclo de vida de uma carteira
+
+```
+        45 min antes da aula          passagem na catraca         fim da aula
+LIVRE ──────────────────────► RESERVADA ──────────────────► OCUPADA ──────────► LIVRE
+(verde)                        (azul)                        (cyan Insted)
+                                                                  │
+                                        saiu do campus antes do fim│
+                                                                  ▼
+                                                          volta a RESERVADA
+                                                          (aluno marcado EVADIDO)
+```
+
+Se a turma excede a capacidade da sala, o excedente vira
+`ALERT_SOBRELOTACAO` (vermelho) — a diretoria **vê** o problema em vez de
+receber um erro silencioso.
+
+### Estados de presença do aluno
+
+| Status | Quando ocorre |
+|---|---|
+| `AGUARDANDO` | aula aberta, aluno ainda não passou na catraca |
+| `PRESENTE` | entrou até a tolerância (padrão: 15 min após o início) |
+| `ATRASADO` | entrou depois da tolerância, com a aula em curso |
+| `AUSENTE` | passou a tolerância sem nenhuma passagem registrada |
+| `EVADIDO` | entrou e deixou o campus faltando mais de 10 min para o fim |
+
+---
+
+## 2. Como rodar
+
+Pré-requisitos: **Python 3.11+** e **Node 18+**.
+
+### Backend
+
+```bash
+cd apps/backend-api
+pip install -r requirements.txt
+python -m uvicorn app.main:app --reload --port 8000
+```
+
+API em `http://127.0.0.1:8000` · documentação interativa em `/docs`.
+
+### Frontend
+
+```bash
+cd apps/web-3d-frontend
+npm install
+npm run dev
+```
+
+Painel em `http://127.0.0.1:5173` (o Vite já faz proxy de `/api` e `/ws`).
+
+### Modo apresentação
+
+Uma demonstração às 9h da manhã mostraria o campus vazio. Para ancorar o
+relógio da aplicação em um horário letivo e acelerar o tempo:
+
+```bash
+RELOGIO_DEMO=19:10 SIMULADOR_FATOR_TEMPO=8 python -m uvicorn app.main:app --port 8000
+```
+
+`SIMULADOR_FATOR_TEMPO=8` faz 8 minutos passarem por segundo — a sala enche na
+frente da diretoria. Com `1` (padrão) o fluxo acontece em tempo real.
+
+---
+
+## 3. Ligando nas catracas de verdade
+
+O simulador existe só para desenvolvimento e demonstração. Desligue com
+`SIMULADOR_ATIVO=false` e aponte a controladora de acesso para um dos dois
+canais — o processamento é idêntico nos dois:
+
+**Webhook HTTP** (uma passagem por chamada):
+
+```http
+POST /api/v1/catracas/evento
+Content-Type: application/json
+
+{ "ra": "20260199", "catraca_id": "CATRACA_PRINCIPAL_A", "direcao": "ENTRADA" }
+```
+
+**WebSocket** (fluxo contínuo, menor latência):
+
+```
+ws://<host>/ws/catracas
+→ { "ra": "20260199", "catraca_id": "CATRACA_PRINCIPAL_A", "direcao": "ENTRADA" }
+```
+
+Se a controladora ficar sem rede, o buffer acumulado pode ser reenviado de uma
+vez em `POST /api/v1/catracas/lote`, preservando os `timestamp` originais.
+
+### Ligando no JACAD de verdade
+
+Preencha `JACAD_BASE_URL` e `JACAD_TOKEN` e mude `JACAD_MODO_MOCK=false`.
+`JacadRestClient` (em `app/services/jacad_client.py`) já implementa o mesmo
+contrato do mock — o motor de presença não muda. Os *paths* e o mapeamento de
+campos estão concentrados nesse arquivo e devem ser ajustados ao contrato do
+tenant Insted.
+
+---
+
+## 4. Endpoints principais
+
+| Método | Rota | Uso |
+|---|---|---|
+| `GET` | `/api/v1/maquete` | topologia + status de todas as carteiras |
+| `GET` | `/api/v1/dashboard` | KPIs, ocupação, série do dia, alertas, ranking |
+| `GET` | `/api/v1/salas/{id}` | chamada nominal da aula em andamento |
+| `GET` | `/api/v1/alunos/{ra}` | onde o aluno está agora + aulas do dia |
+| `GET` | `/api/v1/alunos?q=` | busca por RA ou nome |
+| `GET` | `/api/v1/academico/grade` | grade horária do dia |
+| `POST` | `/api/v1/catracas/evento` | ingestão de passagem |
+| `POST` | `/api/v1/alocacao/realocar` | mover turma de sala (resolver sobrelotação) |
+| `WS` | `/ws/campus` | snapshot inicial + deltas em tempo real |
+| `WS` | `/ws/catracas` | ingestão contínua da controladora |
+
+### Protocolo do `/ws/campus`
+
+No *handshake* o servidor envia `SNAPSHOT_INICIAL` (maquete completa +
+dashboard). Depois disso trafegam apenas incrementos:
+
+- `EVENTO_CATRACA` — a passagem + os deltas de carteira que ela provocou;
+- `DASHBOARD_TICK` — KPIs recalculados (a cada 5 s);
+- `REALOCACAO` — nova maquete após uma turma mudar de sala.
+
+Um painel de diretoria fica dias aberto em telão, então o cliente reconecta
+sozinho com *backoff* exponencial (1 s → 15 s).
+
+---
+
+## 5. Estrutura
+
+```
+apps/
+├── backend-api/                     FastAPI + motor de presença
+│   ├── app/
+│   │   ├── api/v1/
+│   │   │   ├── academico.py         espelho do JACAD
+│   │   │   ├── alocacao.py          realocação manual de turmas
+│   │   │   ├── catracas.py          ingestão de passagens
+│   │   │   ├── presenca.py          leitura: maquete, dashboard, drill-down
+│   │   │   └── ws.py                WebSockets (/ws/campus, /ws/catracas)
+│   │   ├── core/
+│   │   │   ├── config.py            configuração por ambiente
+│   │   │   └── clock.py             relógio real ou ancorado (demo)
+│   │   ├── models/                  campus, academico, dashboard, enums
+│   │   ├── services/
+│   │   │   ├── presence_engine.py   ◄ núcleo: cruza grade × catraca × maquete
+│   │   │   ├── allocation_engine.py alocação de alunos nas carteiras
+│   │   │   ├── campus_state.py      estado único do processo
+│   │   │   ├── dashboard_service.py projeção de leitura da diretoria
+│   │   │   ├── jacad_client.py      adapter do ERP (REST | mock)
+│   │   │   └── realtime.py          hub de broadcast
+│   │   ├── data/campus_seed.py      4 pavimentos, 26 salas, 921 carteiras
+│   │   └── simulator/               gerador de fluxo de catracas
+│   └── smoke_test.py                valida o fluxo ponta a ponta
+└── web-3d-frontend/                 React + Three.js + painel
+    └── src/
+        ├── components/
+        │   ├── Canvas3D.tsx         cena, câmera, modos de visão
+        │   ├── ChairNode.tsx        carteira (individual e instanciada)
+        │   ├── RoomNode.tsx         sala: laje, paredes, rótulo, pulso
+        │   ├── CatracaNode.tsx      torniquete com pulso a cada passagem
+        │   ├── FloorMap.tsx         trilho de pavimentos com mini-indicador
+        │   └── ControlPanel/        KPIs, curva, alertas, rankings, drawer
+        ├── hooks/
+        │   ├── useCampus3D.ts       store (zustand) + aplicação de deltas
+        │   └── useSocket.ts         conexão com reconexão automática
+        └── lib/                     tipos, tema Insted, cliente HTTP
+```
+
+---
+
+## 6. Notas de implementação
+
+**Por que o status das carteiras vive fora da árvore da maquete.**
+A geometria muda raramente; o status muda a cada passagem. O front mantém um
+dicionário plano `cadeira_id → status`, então aplicar um delta é O(1) e não
+re-cria a árvore de pavimentos/salas.
+
+**Por que as carteiras são instanciadas.**
+São 921 carteiras. Renderizadas como *meshes* individuais seriam ~2.700 objetos.
+Com `Instances` do drei, o campus inteiro sai em 3 *draw calls*.
+
+**Por que sobrelotação não lança exceção.**
+Turma maior que a sala é um fato operacional que a diretoria precisa ver e
+resolver (há inclusive um endpoint de realocação), não um erro de programa.
+
+**Deduplicação de eventos.**
+Um painel pode manter mais de uma conexão viva (reconexão, StrictMode em dev).
+O store descarta eventos com `id` já conhecido.
+
+---
+
+## 7. Verificação
+
+```bash
+cd apps/backend-api
+python smoke_test.py
+```
+
+Valida a cadeia completa: carga do JACAD → abertura de aulas pela grade →
+passagem na catraca promovendo a carteira a `OCUPADA` → rastreio do aluno na
+maquete → saída caracterizando evasão → KPIs → handshake do WebSocket →
+realocação de turma.
+
+```bash
+cd apps/web-3d-frontend
+npx tsc --noEmit && npm run build
+```
+
+---
+
+## 8. Limitações conhecidas
+
+- **Estado em memória.** O `CampusState` vive no processo. Reiniciar a API
+  zera a presença do dia. Para produção com múltiplas réplicas, o próximo passo
+  é persistir os `RegistroPresenca` (Postgres) e mover o broadcast para Redis
+  pub/sub.
+- **Comparativo com o dia anterior.** O campo `taxa_presenca_variacao` já
+  circula na API, mas o `baseline_ontem` só será preenchido quando houver
+  histórico persistido — hoje ele exibe `— vs ontem`.
+- **Layout das salas.** As posições em `campus_seed.py` são uma aproximação
+  fiel em número de salas, pavimentos e racks, porém as medidas devem ser
+  conferidas contra a planta oficial antes da entrega final.
+- **Sem autenticação.** O painel é aberto. Antes de expor fora da rede interna,
+  colocar SSO institucional na frente.
