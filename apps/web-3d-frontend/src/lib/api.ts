@@ -1,5 +1,5 @@
 /** Cliente HTTP do Motor de Ocupacao (complementa o WebSocket). */
-import type { Dashboard, DetalheSala, Maquete } from './types';
+import type { Dashboard, DetalheSala, Maquete, RespostaCadastro } from './types';
 
 const BASE = import.meta.env.VITE_API_URL ?? '/api/v1';
 
@@ -13,6 +13,9 @@ async function get<T>(caminho: string): Promise<T> {
 
 export const buscarMaquete = () => get<Maquete>('/maquete');
 export const buscarDashboard = () => get<Dashboard>('/dashboard');
+export const buscarCadastroSalas = () =>
+  get<RespostaCadastro>('/cadastro/salas');
+
 export const buscarDetalheSala = (salaId: string) =>
   get<DetalheSala>(`/salas/${encodeURIComponent(salaId)}`);
 

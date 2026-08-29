@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Canvas3D } from './components/Canvas3D';
+import { CadastroSalas } from './components/CadastroSalas';
 import { FloorMap } from './components/FloorMap';
 import { ControlPanel, EventTicker, Header, RoomDrawer } from './components/ControlPanel';
 import { useCampus3D } from './hooks/useCampus3D';
@@ -63,6 +64,7 @@ function TelaDeBoot() {
 
 export default function App() {
   useSocket();
+  const [cadastroAberto, setCadastroAberto] = useState(false);
 
   const maquete = useCampus3D((s) => s.maquete);
   const modoVisao = useCampus3D((s) => s.modoVisao);
@@ -79,7 +81,7 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <Header />
+      <Header aoAbrirCadastro={() => setCadastroAberto(true)} />
 
       <div className="app-body">
         <FloorMap />
@@ -127,6 +129,7 @@ export default function App() {
 
       <EventTicker />
       <RoomDrawer />
+      {cadastroAberto && <CadastroSalas aoFechar={() => setCadastroAberto(false)} />}
     </div>
   );
 }

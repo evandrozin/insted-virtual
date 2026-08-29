@@ -859,3 +859,131 @@ body {
   color: var(--insted-text-muted);
 }
 .boot-ring.pequeno { width: 14px; height: 14px; border-width: 2px; }
+
+/* -------------------------------------------------- cadastro de salas */
+
+.botao-cadastro {
+  background: transparent;
+  border: 1px solid var(--insted-border);
+  border-radius: var(--radius-sm);
+  color: var(--insted-text-muted);
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all .15s;
+  white-space: nowrap;
+}
+.botao-cadastro:hover {
+  border-color: var(--insted-primary);
+  color: var(--insted-primary);
+}
+
+.cadastro {
+  position: fixed;
+  inset: 40px;
+  max-width: 1180px;
+  margin: 0 auto;
+  background: var(--insted-dark-card);
+  border: 1px solid var(--insted-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  z-index: 41;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: sobe .2s cubic-bezier(.22,.8,.3,1);
+}
+@keyframes sobe {
+  from { transform: translateY(14px); opacity: .5 }
+  to   { transform: none; opacity: 1 }
+}
+
+.cadastro-head {
+  position: relative;
+  padding: 18px 22px 14px;
+  border-bottom: 1px solid var(--insted-border);
+  flex-shrink: 0;
+}
+.cadastro-head h2 { margin: 0; font-size: 18px; font-weight: 700; }
+.cadastro-head > p {
+  margin: 3px 0 0;
+  font-size: 12px;
+  color: var(--insted-text-muted);
+}
+.cadastro-erro { color: var(--severity-atencao); }
+
+.cadastro-filtros {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+.cadastro-busca, .cadastro-filtros select {
+  background: var(--insted-dark-elev);
+  border: 1px solid var(--insted-border);
+  border-radius: var(--radius-sm);
+  color: var(--insted-text-light);
+  padding: 8px 12px;
+  font-size: 13px;
+  font-family: inherit;
+}
+.cadastro-busca { flex: 1; min-width: 240px; }
+.cadastro-busca:focus, .cadastro-filtros select:focus {
+  outline: none;
+  border-color: var(--insted-primary);
+}
+
+.cadastro-totais {
+  display: flex;
+  gap: 18px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--insted-text-muted);
+  flex-wrap: wrap;
+}
+.cadastro-totais b { color: var(--insted-text-light); font-size: 14px; }
+.cadastro-totais .pendente b { color: var(--severity-atencao); }
+
+.cadastro-corpo { flex: 1; overflow: auto; }
+
+.cadastro-tabela {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+.cadastro-tabela th {
+  position: sticky;
+  top: 0;
+  background: var(--insted-dark-elev);
+  text-align: left;
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--insted-text-muted);
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--insted-border);
+  white-space: nowrap;
+  z-index: 1;
+}
+.cadastro-tabela td {
+  padding: 9px 14px;
+  border-bottom: 1px solid rgba(48, 54, 61, .5);
+}
+.cadastro-tabela tbody tr { cursor: pointer; }
+.cadastro-tabela tbody tr:hover { background: rgba(0, 201, 183, .06); }
+.cadastro-tabela .num { text-align: right; font-variant-numeric: tabular-nums; }
+.cadastro-tabela .mono { font-family: var(--font-mono); font-size: 11.5px; }
+.cadastro-tabela .muted { color: var(--insted-text-muted); }
+.cadastro-tabela .pendente { color: var(--severity-atencao); font-style: italic; }
+
+.tag-tipo {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .5px;
+  padding: 2px 8px;
+  border-radius: 100px;
+  background: var(--insted-primary-soft);
+  color: var(--insted-primary);
+}

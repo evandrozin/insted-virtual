@@ -217,3 +217,24 @@ export interface DetalheSala {
     catraca_origem: string | null;
   }>;
 }
+
+/** Linha do cadastro de salas (predio -> pavimento -> sala). */
+export interface SalaCadastro {
+  predio: string;
+  pavimento: string;
+  pavimento_ordem: number;
+  codigo: string;
+  codigo_planta?: string | null;
+  codigo_ensalamento?: string | null;
+  sala: string;
+  tipo: string;
+  capacidade: number;
+  rack_id: string | null;
+  ativa: boolean;
+}
+
+export interface RespostaCadastro {
+  origem: 'banco' | 'seed' | 'banco_indisponivel';
+  erro?: string;
+  salas: SalaCadastro[];
+}

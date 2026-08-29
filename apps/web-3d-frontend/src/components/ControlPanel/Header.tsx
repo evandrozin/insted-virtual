@@ -12,7 +12,9 @@ const MarcaInsted: React.FC = () => (
   <img className="brand-mark" src={marcaInsted} alt="Insted" draggable={false} />
 );
 
-export const Header: React.FC = () => {
+export const Header: React.FC<{ aoAbrirCadastro?: () => void }> = ({
+  aoAbrirCadastro,
+}) => {
   const conectado = useCampus3D((s) => s.conectado);
   const servidorEm = useCampus3D((s) => s.servidorEm);
   const modoRelogio = useCampus3D((s) => s.modoRelogio);
@@ -69,6 +71,16 @@ export const Header: React.FC = () => {
             {dashboard.kpis.catracas_total} catracas
           </small>
         </div>
+      )}
+
+      {aoAbrirCadastro && (
+        <button
+          className="botao-cadastro"
+          onClick={aoAbrirCadastro}
+          title="Cadastro de salas: prédio, andar, nome e capacidade"
+        >
+          Cadastro
+        </button>
       )}
 
       <span className={`live-pill ${conectado ? 'on' : 'off'}`}>
