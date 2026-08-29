@@ -31,6 +31,12 @@ class Settings:
     LIMIAR_BAIXA_PRESENCA: int = _int("LIMIAR_BAIXA_PRESENCA", 60)
     CATRACA_TIMEOUT_S: int = _int("CATRACA_TIMEOUT_S", 900)
 
+    # --- Autenticacao ------------------------------------------------------
+    # Segredo de assinatura dos tokens de sessao. Sem ele o login fica
+    # desligado e o cadastro segue somente-leitura.
+    JWT_SECRET: str = os.getenv("JWT_SECRET", "")
+    SESSAO_HORAS: int = _int("SESSAO_HORAS", 12)
+
     # --- Cadastro de salas (Postgres) --------------------------------------
     # Vazio => topologia vem do seed extraido das plantas (dev e fallback).
     # Definido => predio/pavimento/sala saem do banco, e a Secretaria pode

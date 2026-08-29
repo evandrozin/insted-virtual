@@ -186,6 +186,7 @@ export type MensagemSocket =
   | { tipo: 'DASHBOARD_TICK'; servidor_em?: string; dashboard: Dashboard; deltas?: DeltaCadeira[] }
   | { tipo: 'EVENTO_CATRACA'; evento: EventoCatraca; deltas: DeltaCadeira[] }
   | { tipo: 'REALOCACAO'; turma_id: string; sala_origem: string | null; sala_destino: string; maquete: Maquete }
+  | { tipo: 'MAQUETE_ATUALIZADA'; maquete: Maquete }
   | { tipo: 'PONG' }
   | { tipo: 'ERRO'; detalhe: string };
 
@@ -237,4 +238,39 @@ export interface RespostaCadastro {
   origem: 'banco' | 'seed' | 'banco_indisponivel';
   erro?: string;
   salas: SalaCadastro[];
+}
+
+/** Sessao de quem administra o cadastro. */
+export interface Usuario {
+  nome: string;
+  email: string;
+  papel: 'ADMIN' | 'SECRETARIA' | 'LEITURA';
+  pode_editar: boolean;
+}
+
+export interface Sessao {
+  token: string;
+  usuario: Usuario;
+  expira_em_horas: number;
+}
+
+export interface ConfigLogin {
+  login_habilitado: boolean;
+}
+
+/** Campos aceitos ao criar ou editar uma sala. */
+export interface SalaEntrada {
+  codigo: string;
+  pavimento_codigo: string;
+  nome: string;
+  tipo: string;
+  capacidade: number;
+  codigo_planta?: string | null;
+  codigo_ensalamento?: string | null;
+  rack_id?: string | null;
+  pos_x?: number | null;
+  pos_z?: number | null;
+  largura?: number | null;
+  profundidade?: number | null;
+  observacao?: string | null;
 }

@@ -1,6 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { buscarCadastroSalas } from '../lib/api';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { buscarCadastroSalas, desativarSala, ErroApi, reativarSala } from '../lib/api';
 import { useCampus3D } from '../hooks/useCampus3D';
+import { useSessao } from '../hooks/useSessao';
+import { Login } from './Login';
+import { SalaFormulario } from './SalaFormulario';
 import type { RespostaCadastro, SalaCadastro } from '../lib/types';
 
 /**
@@ -17,15 +20,56 @@ export const CadastroSalas: React.FC<{ aoFechar: () => void }> = ({ aoFechar }) 
   const [pavimento, setPavimento] = useState('TODOS');
   const abrirSala = useCampus3D((s) => s.abrirSala);
 
+  const token = useSessao((s) => s.token);
+  const usuario = useSessao((s) => s.usuario);
+  const loginHabilitado = useSessao((s) => s.loginHabilitado);
+  const carregarConfig = useSessao((s) => s.carregarConfig);
+  const sair = useSessao((s) => s.sair);
+  const expirar = useSessao((s) => s.expirar);
+
+  const [loginAberto, setLoginAberto] = useState(false);
+  const [editando, setEditando] = useState<SalaCadastro | null>(null);
+  const [criando, setCriando] = useState(false);
+  const [aviso, setAviso] = useState<string | null>(null);
+
+  const podeEditar = Boolean(usuario?.pode_editar) && dados?.origem === 'banco';
+
+  const recarregar = useCallback(() => {
+    buscarCadastroSalas()
+      .then(setDados)
+      .catch((e) => setErro(String(e)));
+  }, []);
+
   useEffect(() => {
     let cancelado = false;
     buscarCadastroSalas()
       .then((r) => !cancelado && setDados(r))
       .catch((e) => !cancelado && setErro(String(e)));
+    carregarConfig();
     return () => {
       cancelado = true;
     };
-  }, []);
+  }, [carregarConfig]);
+
+  async function alternarSituacao(sala: SalaCadastro) {
+    if (!token) return;
+    const acao = sala.ativa ? 'desativar' : 'reativar';
+    if (sala.ativa && !window.confirm(
+      `Desativar ${sala.codigo}? Ela sai da maquete, mas o registro e o ` +
+      `histórico são preservados.`)) return;
+    try {
+      await (sala.ativa ? desativarSala : reativarSala)(sala.codigo, token);
+      setAviso(`${sala.codigo} ${sala.ativa ? 'desativada' : 'reativada'}.`);
+      recarregar();
+    } catch (e) {
+      if (e instanceof ErroApi && e.status === 401) {
+        expirar();
+        setAviso('Sua sessão expirou. Entre novamente.');
+      } else {
+        setAviso(`Não foi possível ${acao}: ${e instanceof Error ? e.message : e}`);
+      }
+    }
+  }
 
   useEffect(() => {
     const onEsc = (e: KeyboardEvent) => e.key === 'Escape' && aoFechar();
@@ -78,6 +122,37 @@ export const CadastroSalas: React.FC<{ aoFechar: () => void }> = ({ aoFechar }) 
             {dados?.erro && <span className="cadastro-erro"> — {dados.erro}</span>}
           </p>
 
+          <div className="cadastro-acoes">
+            {usuario ? (
+              <>
+                <span className="cadastro-quem">
+                  {usuario.nome} · <b>{usuario.papel}</b>
+                </span>
+                {podeEditar && (
+                  <button className="botao-primario" onClick={() => setCriando(true)}>
+                    + Nova sala
+                  </button>
+                )}
+                <button className="botao-secundario" onClick={sair}>Sair</button>
+              </>
+            ) : (
+              loginHabilitado && (
+                <button className="botao-secundario" onClick={() => setLoginAberto(true)}>
+                  Entrar para editar
+                </button>
+              )
+            )}
+          </div>
+
+          {aviso && <div className="cadastro-aviso">{aviso}</div>}
+
+          {usuario && !podeEditar && dados?.origem !== 'banco' && (
+            <div className="cadastro-aviso">
+              A edição exige o cadastro em banco. Esta instalação está lendo da
+              planta (sem <code>DATABASE_URL</code>).
+            </div>
+          )}
+
           <div className="cadastro-filtros">
             <input
               className="cadastro-busca"
@@ -129,12 +204,14 @@ export const CadastroSalas: React.FC<{ aoFechar: () => void }> = ({ aoFechar }) 
                   <th className="num">Capacidade</th>
                   <th>Ensalamento</th>
                   <th>Rack</th>
+                  {podeEditar && <th className="acoes">Ações</th>}
                 </tr>
               </thead>
               <tbody>
                 {filtradas.map((s: SalaCadastro) => (
                   <tr
                     key={s.codigo}
+                    className={s.ativa ? '' : 'inativa'}
                     onClick={() => {
                       abrirSala(s.codigo);
                       aoFechar();
@@ -153,6 +230,19 @@ export const CadastroSalas: React.FC<{ aoFechar: () => void }> = ({ aoFechar }) 
                       {s.codigo_ensalamento ?? <span className="pendente">a definir</span>}
                     </td>
                     <td className="muted mono">{s.rack_id ?? '—'}</td>
+                    {podeEditar && (
+                      <td className="acoes" onClick={(e) => e.stopPropagation()}>
+                        <button className="botao-linha" onClick={() => setEditando(s)}>
+                          Editar
+                        </button>
+                        <button
+                          className={`botao-linha ${s.ativa ? 'perigo' : ''}`}
+                          onClick={() => alternarSituacao(s)}
+                        >
+                          {s.ativa ? 'Desativar' : 'Reativar'}
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -160,6 +250,25 @@ export const CadastroSalas: React.FC<{ aoFechar: () => void }> = ({ aoFechar }) 
           )}
         </div>
       </section>
+
+      {loginAberto && <Login aoFechar={() => setLoginAberto(false)} />}
+
+      {(criando || editando) && (
+        <SalaFormulario
+          sala={editando}
+          pavimentoCodigo={undefined}
+          aoFechar={() => {
+            setCriando(false);
+            setEditando(null);
+          }}
+          aoSalvar={() => {
+            setCriando(false);
+            setEditando(null);
+            setAviso('Cadastro atualizado. A maquete já reflete a mudança.');
+            recarregar();
+          }}
+        />
+      )}
     </>
   );
 };

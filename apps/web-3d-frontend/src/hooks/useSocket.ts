@@ -66,6 +66,10 @@ export function useSocket() {
           case 'REALOCACAO':
             store.aplicarMaquete(msg.maquete);
             break;
+          case 'MAQUETE_ATUALIZADA':
+            // Alguem editou o cadastro: a planta mudou sob os pes do painel.
+            store.aplicarMaquete(msg.maquete);
+            break;
           default:
             break;
         }

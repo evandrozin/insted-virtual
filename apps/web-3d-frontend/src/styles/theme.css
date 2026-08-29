@@ -987,3 +987,202 @@ body {
   background: var(--insted-primary-soft);
   color: var(--insted-primary);
 }
+
+/* ------------------------------------------------ login e edicao do cadastro */
+
+.botao-primario, .botao-secundario {
+  border-radius: var(--radius-sm);
+  padding: 8px 16px;
+  font-size: 12.5px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all .15s;
+  white-space: nowrap;
+}
+.botao-primario {
+  background: var(--insted-primary);
+  border: 1px solid var(--insted-primary);
+  color: #06231f;
+}
+.botao-primario:hover:not(:disabled) { background: var(--insted-primary-hover); }
+.botao-primario:disabled { opacity: .55; cursor: default; }
+
+.botao-secundario {
+  background: transparent;
+  border: 1px solid var(--insted-border);
+  color: var(--insted-text-muted);
+}
+.botao-secundario:hover { border-color: var(--insted-primary); color: var(--insted-primary); }
+
+.botao-linha {
+  background: transparent;
+  border: 1px solid var(--insted-border);
+  border-radius: 4px;
+  color: var(--insted-text-muted);
+  padding: 3px 9px;
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+  margin-right: 5px;
+}
+.botao-linha:hover { border-color: var(--insted-primary); color: var(--insted-primary); }
+.botao-linha.perigo:hover { border-color: var(--status-alert); color: var(--status-alert); }
+
+.cadastro-acoes {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+.cadastro-quem { font-size: 12px; color: var(--insted-text-muted); margin-right: auto; }
+.cadastro-quem b { color: var(--insted-primary); font-size: 11px; letter-spacing: .5px; }
+
+.cadastro-aviso {
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(0, 201, 183, .35);
+  background: var(--insted-primary-soft);
+  font-size: 12px;
+  color: var(--insted-text-light);
+}
+.cadastro-aviso code { font-family: var(--font-mono); color: var(--insted-primary); }
+
+.cadastro-tabela tr.inativa td { opacity: .45; }
+.cadastro-tabela .acoes { white-space: nowrap; text-align: right; }
+
+/* --- modal de login --- */
+
+.login {
+  position: fixed;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 380px;
+  max-width: 92vw;
+  background: var(--insted-dark-card);
+  border: 1px solid var(--insted-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  padding: 26px 28px;
+  z-index: 61;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.login h3 { margin: 0; font-size: 18px; font-weight: 700; }
+.login-sub {
+  margin: -8px 0 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--insted-text-muted);
+}
+
+/* --- formulario de sala --- */
+
+.form-sala {
+  position: fixed;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 660px;
+  max-width: 94vw;
+  max-height: 88vh;
+  background: var(--insted-dark-card);
+  border: 1px solid var(--insted-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  z-index: 61;
+  display: flex;
+  flex-direction: column;
+}
+.form-sala > header {
+  position: relative;
+  padding: 18px 22px 14px;
+  border-bottom: 1px solid var(--insted-border);
+}
+.form-sala > header h3 { margin: 0; font-size: 17px; font-weight: 700; }
+.form-corpo {
+  padding: 18px 22px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.form-sala > footer {
+  padding: 14px 22px;
+  border-top: 1px solid var(--insted-border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.form-linha { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.form-linha.quatro { grid-template-columns: repeat(4, 1fr); }
+
+.login label, .form-sala label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: .3px;
+  color: var(--insted-text-muted);
+}
+.login input, .form-sala input, .form-sala select {
+  background: var(--insted-dark-elev);
+  border: 1px solid var(--insted-border);
+  border-radius: var(--radius-sm);
+  color: var(--insted-text-light);
+  padding: 9px 11px;
+  font-size: 13px;
+  font-family: inherit;
+  font-weight: 400;
+}
+.login input:focus, .form-sala input:focus, .form-sala select:focus {
+  outline: none;
+  border-color: var(--insted-primary);
+}
+.form-sala input:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+.form-sala label small {
+  font-weight: 400;
+  font-size: 10.5px;
+  color: var(--insted-text-muted);
+}
+
+.form-sala fieldset {
+  border: 1px solid var(--insted-border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px 14px;
+  margin: 0;
+}
+.form-sala fieldset.obrigatoria { border-color: rgba(245, 158, 11, .45); }
+.form-sala legend {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .6px;
+  text-transform: uppercase;
+  color: var(--insted-text-muted);
+  padding: 0 6px;
+}
+.marca-obrigatoria { color: var(--severity-atencao); }
+
+.form-nota {
+  margin: 0 0 10px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--insted-text-muted);
+}
+
+.form-erro {
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(239, 68, 68, .45);
+  background: rgba(239, 68, 68, .1);
+  color: #fca5a5;
+  font-size: 12px;
+  line-height: 1.5;
+}

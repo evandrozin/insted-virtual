@@ -169,7 +169,8 @@ apps/
 │   │   │       └── ws.py            WebSockets (/ws/campus, /ws/catracas)
 │   │   ├── core/
 │   │   │   ├── config.py            configuração por ambiente
-│   │   │   └── clock.py             relógio real ou ancorado (demo)
+│   │   │   ├── clock.py             relógio real ou ancorado (demo)
+│   │   │   └── seguranca.py         hash scrypt de senha e token de sessão
 │   │   ├── models/                  campus, academico, dashboard, enums
 │   │   ├── services/
 │   │   │   ├── presence_engine.py   ◄ núcleo: cruza grade × catraca × maquete
@@ -190,6 +191,8 @@ apps/
 │   ├── redis_test.py                store Redis + pub/sub entre instâncias
 │   ├── redis_e2e_test.py            app completa sobre Redis
 │   ├── cadastro_test.py             banco e seed produzem a mesma maquete
+│   ├── auth_test.py                 login, papéis, validação e auditoria
+│   └── criar_usuario.py             cria a primeira conta (senha no terminal)
 │   └── vercel.json                  maxDuration e crons
 └── web-3d-frontend/                 React + Three.js + painel
     └── src/
@@ -258,6 +261,36 @@ tudo resolvido, e é o que `GET /api/v1/cadastro/salas` devolve.
 
 Se o banco estiver fora do ar no boot, o sistema registra o aviso e segue com
 o seed. Um cadastro indisponível não pode derrubar o painel da diretoria.
+
+### Login e edição do cadastro
+
+O painel de leitura é **aberto** — um telão na diretoria não pode pedir sessão.
+O login existe para autorizar a **escrita**: criar, editar e desativar sala.
+
+Papéis: `ADMIN` e `SECRETARIA` editam; `LEITURA` apenas consulta. Toda alteração
+grava autor, data e o antes/depois em `sala_auditoria`.
+
+Para habilitar, defina `JWT_SECRET` (mínimo 32 caracteres) e crie a primeira
+conta — a senha é digitada no terminal e vira hash `scrypt` antes de tocar o
+banco, sem passar por arquivo ou log:
+
+```bash
+cd apps/backend-api && python criar_usuario.py
+```
+
+Regras que o formulário aplica: sala com capacidade precisa de largura e
+profundidade (senão existiria no cadastro e sumiria da maquete); tipo e
+pavimento vêm de listas fechadas; e desativar **não apaga** — a sala pode estar
+referenciada na grade horária, então ela sai da maquete e o histórico fica.
+
+Ao salvar, o backend recarrega a topologia e transmite `MAQUETE_ATUALIZADA`:
+os painéis abertos refletem a mudança sem recarregar a página.
+
+> **O painel continua público.** Ele mostra nomes de alunos e presença, e hoje
+> qualquer pessoa com a URL vê tudo. Proteger a leitura exigiria exigir sessão
+> nos endpoints de consulta e no WebSocket, além de decidir como um telão
+> autentica sozinho — não está implementado. Enquanto isso, o mais seguro é
+> manter o painel em rede interna ou atrás do Deployment Protection do Vercel.
 
 ### Vercel
 
@@ -334,6 +367,13 @@ Para o caminho com estado compartilhado (usa `fakeredis`, não precisa de servid
 
 ```bash
 pip install fakeredis && python redis_test.py && python redis_e2e_test.py
+```
+
+Login, permissões e regras de edição (repositório substituído por um duplo em
+memória, sem precisar de banco):
+
+```bash
+python auth_test.py
 ```
 
 O primeiro valida o store e o pub/sub entre duas instâncias; o segundo sobe a

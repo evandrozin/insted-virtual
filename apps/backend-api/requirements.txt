@@ -13,5 +13,8 @@ redis>=5.0
 # sem ele a topologia vem do seed extraido das plantas).
 asyncpg>=0.30
 
+# Tokens de sessao para a edicao do cadastro (obrigatorio com JWT_SECRET).
+PyJWT>=2.8
+
 # Somente para os testes: emula um servidor Redis em processo.
 # fakeredis>=2.30
