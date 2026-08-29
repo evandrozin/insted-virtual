@@ -1,6 +1,12 @@
-"""Configuracao central da API do Motor de Ocupacao Insted."""
+"""Configuracao central da API do Motor de Ocupacao Insted.
+
+O `.env` e carregado em `app/core/__init__.py`, que roda antes deste modulo.
+Variaveis ja definidas no ambiente tem precedencia: em producao o painel da
+plataforma manda, e o .env serve para desenvolvimento local.
+"""
 import os
 from typing import List
+
 
 
 def _bool(chave: str, padrao: bool) -> bool:
