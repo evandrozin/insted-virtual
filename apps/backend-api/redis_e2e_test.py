@@ -9,7 +9,24 @@ import asyncio
 import os
 import sys
 
-os.environ.setdefault("RELOGIO_DEMO", "19:20")
+from datetime import date, timedelta
+
+
+def ancora_letiva(hora: str = "19:20") -> str:
+    """Ultimo dia de semana as `hora`, para o teste nao depender de quando roda.
+
+    A grade do JACAD so tem aula de segunda a sexta: rodar num sabado sem isso
+    faria o teste falhar por nao existir aula ativa.
+    """
+    dia = date.today()
+    while dia.weekday() > 4:
+        dia -= timedelta(days=1)
+    return f"{dia.isoformat()}T{hora}"
+
+
+
+
+os.environ.setdefault("RELOGIO_DEMO", ancora_letiva())
 os.environ.setdefault("SIMULADOR_ATIVO", "false")
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))

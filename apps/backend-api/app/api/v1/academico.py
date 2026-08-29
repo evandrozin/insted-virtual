@@ -77,3 +77,39 @@ async def detalhar_turma(turma_id: str) -> dict:
             for ra in turma.alunos_ra if ra in estado.alunos
         ],
     }
+
+
+@router.get("/cadastro/salas")
+async def cadastro_de_salas() -> dict:
+    """Cadastro completo como a Secretaria le: predio, andar, nome, lugares.
+
+    Sem banco configurado devolve a planta que esta em uso, vinda do seed.
+    """
+    from app.core.config import settings
+
+    if settings.DATABASE_URL:
+        from app.data.sala_repository import listar_cadastro
+
+        try:
+            return {"origem": "banco", "salas": await listar_cadastro(settings.DATABASE_URL)}
+        except Exception as erro:
+            return {"origem": "banco_indisponivel", "erro": str(erro), "salas": []}
+
+    return {
+        "origem": "seed",
+        "salas": [
+            {
+                "predio": "Campus Sede",
+                "pavimento": pav.nome,
+                "pavimento_ordem": pav.ordem,
+                "codigo": sala.id,
+                "sala": sala.nome,
+                "tipo": sala.tipo,
+                "capacidade": sala.capacidade,
+                "rack_id": sala.rack_id,
+                "ativa": True,
+            }
+            for pav in estado.pavimentos
+            for sala in pav.salas
+        ],
+    }

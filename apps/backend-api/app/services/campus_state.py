@@ -55,6 +55,20 @@ class CampusState:
         # --- Indice cadeira <-> aluno (projecao local) ----------------------
         self.cadeira_por_aluno: Dict[str, str] = {}
 
+    # -- troca da topologia -------------------------------------------------
+    def carregar_topologia(self, pavimentos: List[PavimentoModel]) -> None:
+        """Substitui a planta vinda do seed pela do cadastro em banco."""
+        with self.lock:
+            self.pavimentos = pavimentos
+            self.salas = {}
+            self.cadeiras = {}
+            for pav in pavimentos:
+                for sala in pav.salas:
+                    self.salas[sala.id] = sala
+                    for cadeira in sala.cadeiras:
+                        self.cadeiras[cadeira.id] = cadeira
+            self.cadeira_por_aluno = {}
+
     # -- carga do ERP -------------------------------------------------------
     def carregar_academico(
         self,

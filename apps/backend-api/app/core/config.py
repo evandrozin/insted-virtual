@@ -31,6 +31,17 @@ class Settings:
     LIMIAR_BAIXA_PRESENCA: int = _int("LIMIAR_BAIXA_PRESENCA", 60)
     CATRACA_TIMEOUT_S: int = _int("CATRACA_TIMEOUT_S", 900)
 
+    # --- Cadastro de salas (Postgres) --------------------------------------
+    # Vazio => topologia vem do seed extraido das plantas (dev e fallback).
+    # Definido => predio/pavimento/sala saem do banco, e a Secretaria pode
+    # cadastrar salas sem deploy.
+    DATABASE_URL: str = (
+        os.getenv("DATABASE_URL", "")
+        or os.getenv("POSTGRES_URL", "")
+        or os.getenv("SUPABASE_DB_URL", "")
+    )
+    PREDIO_CODIGO: str = os.getenv("PREDIO_CODIGO", "SEDE")
+
     # --- Estado compartilhado ---------------------------------------------
     # Vazio => estado em memoria (instancia unica, comportamento padrao).
     # Definido => estado e broadcast via Redis, permitindo varias instancias

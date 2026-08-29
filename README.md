@@ -19,7 +19,7 @@ O motor cruza três fontes e projeta o resultado em uma única visão:
 |---|---|---|
 | **JACAD** (ERP acadêmico) | matrículas, turmas, grade horária, professor, sala | sync a cada 15 min |
 | **Catracas** | passagens de entrada/saída por RA | evento a evento (tempo real) |
-| **Maquete 3D** | topologia dos 4 pavimentos, 63 ambientes e 2.742 lugares | estático (seed) |
+| **Maquete 3D** | topologia dos 4 pavimentos, 63 ambientes e 2.742 lugares | cadastro em Postgres (ou seed) |
 
 ### Ciclo de vida de uma carteira
 
@@ -182,11 +182,14 @@ apps/
 │   │   │       ├── base.py          contrato EstadoStore
 │   │   │       ├── memoria.py       instância única (padrão)
 │   │   │       └── redis_store.py   várias instâncias / serverless
-│   │   ├── data/campus_seed.py      planta real: 4 pavimentos, 63 ambientes
+│   │   ├── data/
+│   │   │   ├── campus_seed.py       planta real: 4 pavimentos, 63 ambientes
+│   │   │   └── sala_repository.py   lê o cadastro de salas do Postgres
 │   │   └── simulator/               gerador de fluxo de catracas
 │   ├── smoke_test.py                fluxo ponta a ponta (memória)
 │   ├── redis_test.py                store Redis + pub/sub entre instâncias
 │   ├── redis_e2e_test.py            app completa sobre Redis
+│   ├── cadastro_test.py             banco e seed produzem a mesma maquete
 │   └── vercel.json                  maxDuration e crons
 └── web-3d-frontend/                 React + Three.js + painel
     └── src/
@@ -240,6 +243,21 @@ Nem tudo precisou ir para o Redis. Topologia (vem do seed), espelho do JACAD
 (vem do sync), alocação de carteiras (função pura da ordem das cadeiras e da
 lista da turma) e janela de aulas (derivada do relógio) são **determinísticos**:
 cada instância os reconstrói igual. Só o que muda a cada passagem é compartilhado.
+
+### Cadastro de salas em Postgres
+
+Sem `DATABASE_URL` a topologia vem do seed extraído das plantas — é o padrão e
+o modo de desenvolvimento. Com `DATABASE_URL`, o cadastro no banco passa a ser
+a fonte de verdade e a Secretaria pode criar ou editar uma sala sem deploy.
+
+O schema é `predio → pavimento → sala`. Além do que a Secretaria enxerga
+(prédio, andar, nome, capacidade), a sala guarda a **geometria** (`pos_x`,
+`pos_z`, `largura`, `profundidade`, em metros) — sem isso uma sala cadastrada
+não teria como ser desenhada na maquete. A view `vw_sala_completa` entrega
+tudo resolvido, e é o que `GET /api/v1/cadastro/salas` devolve.
+
+Se o banco estiver fora do ar no boot, o sistema registra o aviso e segue com
+o seed. Um cadastro indisponível não pode derrubar o painel da diretoria.
 
 ### Vercel
 

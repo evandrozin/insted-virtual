@@ -65,6 +65,8 @@ async def lifespan(app: FastAPI):
     await clock.inicializar(store)
     print(f"[boot] relogio: {clock.descricao()}")
 
+    await _carregar_topologia()
+
     resumo = motor.sincronizar_jacad()
     print(f"[boot] JACAD carregado: {resumo}")
 
@@ -98,6 +100,35 @@ async def lifespan(app: FastAPI):
         tarefa.cancel()
     await asyncio.gather(*_tarefas, return_exceptions=True)
     await store.encerrar()
+
+
+async def _carregar_topologia() -> None:
+    """Le o cadastro de salas do Postgres, se houver banco configurado.
+
+    Sem DATABASE_URL - ou se o banco falhar - segue valendo o seed extraido
+    das plantas, que ja esta carregado. Um cadastro fora do ar nao pode
+    derrubar o painel da diretoria.
+    """
+    if not settings.DATABASE_URL:
+        print("[boot] topologia: seed das plantas (sem DATABASE_URL)")
+        return
+
+    from app.data.sala_repository import carregar_topologia
+
+    try:
+        pavimentos = await carregar_topologia(
+            settings.DATABASE_URL, settings.PREDIO_CODIGO
+        )
+    except Exception as erro:
+        print(f"[boot] topologia: falha no cadastro ({erro}); usando o seed")
+        return
+
+    estado.carregar_topologia(pavimentos)
+    ambientes = sum(len(p.salas) for p in pavimentos)
+    print(
+        f"[boot] topologia: cadastro em banco - {len(pavimentos)} pavimentos, "
+        f"{ambientes} ambientes, {estado.capacidade_total()} lugares"
+    )
 
 
 async def _assinar_deltas() -> None:

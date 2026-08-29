@@ -23,9 +23,28 @@ _FATOR: int = max(1, int(os.getenv("SIMULADOR_FATOR_TEMPO", "1")))
 _inicio_real: datetime = datetime.now()
 _inicio_virtual: Optional[datetime] = None
 
+
+def _interpretar_ancora(valor: str, hoje: datetime) -> Optional[datetime]:
+    """Aceita "19:10" (hoje nesse horario) ou uma data ISO completa.
+
+    A forma com data existe porque a grade so tem aula de segunda a sexta:
+    ancorar so a hora num sabado mostraria o campus vazio.
+    """
+    valor = valor.strip()
+    if not valor:
+        return None
+    if ":" in valor and "-" not in valor and "T" not in valor:
+        h, m = (valor.split(":") + ["0"])[:2]
+        return datetime.combine(hoje.date(), time(int(h), int(m)))
+    try:
+        return datetime.fromisoformat(valor)
+    except ValueError:
+        print(f"[relogio] RELOGIO_DEMO invalido: {valor!r}; usando hora real")
+        return None
+
+
 if _ANCORA_CONFIG:
-    _h, _m = (_ANCORA_CONFIG.split(":") + ["0"])[:2]
-    _inicio_virtual = datetime.combine(_inicio_real.date(), time(int(_h), int(_m)))
+    _inicio_virtual = _interpretar_ancora(_ANCORA_CONFIG, _inicio_real)
 
 
 async def inicializar(store) -> None:
@@ -70,5 +89,8 @@ def em_modo_demo() -> bool:
 def descricao() -> str:
     if not em_modo_demo():
         return "tempo real"
-    ancora = _inicio_virtual.strftime("%H:%M") if _inicio_virtual else "agora"
+    if _inicio_virtual is None:
+        return f"demo (fator {_FATOR}x)"
+    dias = ["seg", "ter", "qua", "qui", "sex", "sab", "dom"]
+    ancora = f"{dias[_inicio_virtual.weekday()]} {_inicio_virtual.strftime('%d/%m %H:%M')}"
     return f"demo (ancora {ancora}, fator {_FATOR}x)"

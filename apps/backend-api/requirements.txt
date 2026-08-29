@@ -9,5 +9,9 @@ websockets>=14.0
 # sem ele o sistema roda em memoria e este pacote fica ocioso).
 redis>=5.0
 
+# Cadastro de salas em Postgres (obrigatorio quando DATABASE_URL existe;
+# sem ele a topologia vem do seed extraido das plantas).
+asyncpg>=0.30
+
 # Somente para os testes: emula um servidor Redis em processo.
 # fakeredis>=2.30
