@@ -51,9 +51,9 @@ async def carregar_topologia(
     Devolve exatamente a mesma estrutura de `construir_pavimentos()`, entao o
     resto do sistema nao sabe de onde a topologia veio.
     """
-    import asyncpg
+    from app.data.conexao import abrir
 
-    conexao = await asyncpg.connect(dsn, timeout=15)
+    conexao = await abrir(dsn)
     try:
         linhas = await conexao.fetch(CONSULTA, predio_codigo)
     finally:
@@ -134,9 +134,9 @@ def montar_pavimentos(linhas) -> List[PavimentoModel]:
 
 async def listar_cadastro(dsn: str) -> List[dict]:
     """Cadastro completo, como a Secretaria le: predio, andar, nome, lugares."""
-    import asyncpg
+    from app.data.conexao import abrir
 
-    conexao = await asyncpg.connect(dsn, timeout=15)
+    conexao = await abrir(dsn)
     try:
         linhas = await conexao.fetch(
             """

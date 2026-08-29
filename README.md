@@ -270,13 +270,20 @@ O login existe para autorizar a **escrita**: criar, editar e desativar sala.
 Papéis: `ADMIN` e `SECRETARIA` editam; `LEITURA` apenas consulta. Toda alteração
 grava autor, data e o antes/depois em `sala_auditoria`.
 
-Para habilitar, defina `JWT_SECRET` (mínimo 32 caracteres) e crie a primeira
-conta — a senha é digitada no terminal e vira hash `scrypt` antes de tocar o
+Para habilitar, defina `DATABASE_URL` e `JWT_SECRET` (mínimo 32 caracteres) —
+localmente dá para pôr os dois em `apps/backend-api/.env`, que o git ignora — e
+crie a primeira conta — a senha é digitada no terminal e vira hash `scrypt` antes de tocar o
 banco, sem passar por arquivo ou log:
 
 ```bash
 cd apps/backend-api && python criar_usuario.py
 ```
+
+No Supabase, a connection string fica no botão **Connect** do topo do painel,
+não em *Settings → Database*. Use **Session pooler** para rodar local e
+**Transaction pooler** (porta 6543) na Vercel — o código detecta a porta 6543
+e desliga o cache de *prepared statements*, que o PgBouncer em modo transação
+não suporta.
 
 Regras que o formulário aplica: sala com capacidade precisa de largura e
 profundidade (senão existiria no cadastro e sumiria da maquete); tipo e

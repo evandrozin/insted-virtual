@@ -115,7 +115,10 @@ async def _carregar_topologia() -> None:
         print("[boot] topologia: seed das plantas (sem DATABASE_URL)")
         return
 
+    from app.data.conexao import descrever
     from app.data.sala_repository import carregar_topologia
+
+    print(f"[boot] banco: {descrever(settings.DATABASE_URL)}")
 
     try:
         pavimentos = await carregar_topologia(

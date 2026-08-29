@@ -17,11 +17,9 @@ CAMPOS_EDITAVEIS = (
 
 
 async def _conectar():
-    import asyncpg
+    from app.data.conexao import abrir
 
-    if not settings.DATABASE_URL:
-        raise RuntimeError("DATABASE_URL nao configurado.")
-    return await asyncpg.connect(settings.DATABASE_URL, timeout=15)
+    return await abrir()
 
 
 # ---------------------------------------------------------------------------
