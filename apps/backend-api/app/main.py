@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1 import (
-    academico, alocacao, cadastro, catracas, cron, presenca, ws
+    academico, alocacao, cadastro, catracas, configuracao, cron, presenca, ws
 )
 from app.core import clock
 from app.core.config import settings
@@ -167,7 +167,7 @@ app.add_middleware(
 
 for router in (
     presenca.router, catracas.router, academico.router, alocacao.router,
-    cron.router, cadastro.router,
+    cron.router, cadastro.router, configuracao.router,
 ):
     app.include_router(router, prefix=settings.API_V1_PREFIX)
 
