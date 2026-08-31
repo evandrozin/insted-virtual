@@ -1,6 +1,12 @@
 /** Cliente HTTP do Motor de Ocupacao (complementa o WebSocket). */
 import type {
   ConfigLogin,
+  Integracoes,
+  ListaPessoas,
+  Pessoa,
+  PessoaEntrada,
+  ResumoPessoas,
+  TipoPessoa,
   Dashboard,
   DetalheSala,
   Maquete,
@@ -99,4 +105,49 @@ export const desativarSala = (codigo: string, token: string) =>
 export const reativarSala = (codigo: string, token: string) =>
   enviar<unknown>(
     'POST', `/cadastro/salas/${encodeURIComponent(codigo)}/reativar`, undefined, token,
+  );
+
+// --- configuracao e pessoas -------------------------------------------------
+
+export const buscarIntegracoes = () => get<Integracoes>('/config/integracoes');
+
+export const testarJacad = (token: string) =>
+  enviar<{ ok: boolean; modo: string; alunos?: number; turmas?: number;
+           aulas?: number; erro?: string;
+           amostra?: Array<{ identificador: string; nome: string; curso: string }> }>(
+    'POST', '/config/testar/jacad', undefined, token,
+  );
+
+export const buscarResumoPessoas = () => get<ResumoPessoas>('/pessoas/resumo');
+
+export const buscarTiposPessoa = () =>
+  get<{ tipos: TipoPessoa[] }>('/pessoas/tipos');
+
+export function buscarPessoas(params: {
+  tipo?: string; q?: string; limite?: number; offset?: number;
+} = {}) {
+  const busca = new URLSearchParams();
+  if (params.tipo) busca.set('tipo', params.tipo);
+  if (params.q) busca.set('q', params.q);
+  busca.set('limite', String(params.limite ?? 100));
+  busca.set('offset', String(params.offset ?? 0));
+  return get<ListaPessoas>(`/pessoas?${busca}`);
+}
+
+export const salvarPessoa = (
+  identificador: string, dados: PessoaEntrada, token: string,
+) =>
+  enviar<{ pessoa: Pessoa }>(
+    'PUT', `/pessoas/${encodeURIComponent(identificador)}`, dados, token,
+  );
+
+export const desativarPessoa = (identificador: string, token: string) =>
+  enviar<unknown>(
+    'DELETE', `/pessoas/${encodeURIComponent(identificador)}`, undefined, token,
+  );
+
+export const sincronizarPessoas = (token: string) =>
+  enviar<{ recebidos: number; gravados: number; desativados: number;
+           sincronizado_em: string }>(
+    'POST', '/pessoas/sincronizar', undefined, token,
   );

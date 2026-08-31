@@ -274,3 +274,108 @@ export interface SalaEntrada {
   profundidade?: number | null;
   observacao?: string | null;
 }
+
+/** Situacao das integracoes. Nenhum segredo trafega aqui. */
+export interface Integracoes {
+  jacad: {
+    modo: 'simulado' | 'integrado';
+    base_url: string | null;
+    chave_configurada: boolean;
+    chave: string;
+    intervalo_sync_min: number;
+    ultima_sync: string | null;
+    alunos: number;
+    turmas: number;
+    aulas: number;
+  };
+  catracas: {
+    modo: 'simulado' | 'integrado';
+    total: number;
+    online: number;
+    entradas_hoje: number;
+    saidas_hoje: number;
+    webhook: string;
+    websocket: string;
+    lote: string;
+    identificador: string;
+  };
+  data_hora: {
+    fuso: string;
+    agora: string;
+    modo: string;
+    em_demonstracao: boolean;
+  };
+  infraestrutura: {
+    estado_compartilhado: string;
+    banco_configurado: boolean;
+    login_disponivel: boolean;
+    loop_interno: boolean;
+  };
+  regras: {
+    tolerancia_atraso_min: number;
+    janela_chegada_min: number;
+    limiar_baixa_presenca: number;
+    catraca_timeout_s: number;
+  };
+}
+
+export interface TipoPessoa {
+  codigo: string;
+  nome: string;
+  plural: string;
+  conta_presenca_em_aula: boolean;
+  cor: string | null;
+  ordem: number;
+  ativo?: boolean;
+  pessoas?: number;
+  ativos?: number;
+  no_campus?: number;
+}
+
+export interface Pessoa {
+  id: number;
+  identificador: string;
+  nome: string;
+  email: string | null;
+  curso: string | null;
+  turma_id: string | null;
+  periodo: number | null;
+  setor: string | null;
+  cargo: string | null;
+  situacao: string;
+  origem: 'JACAD' | 'CATRACA' | 'MANUAL';
+  ativo: boolean;
+  sincronizado_em: string | null;
+  tipo: string;
+  tipo_nome: string;
+  tipo_plural: string;
+  tipo_cor: string | null;
+  conta_presenca_em_aula: boolean;
+  no_campus?: boolean;
+}
+
+export interface ListaPessoas {
+  total: number;
+  pessoas: Pessoa[];
+  no_campus_agora: number;
+}
+
+export interface ResumoPessoas {
+  tipos: TipoPessoa[];
+  no_campus_agora: number;
+  sem_cadastro: number;
+}
+
+export interface PessoaEntrada {
+  identificador: string;
+  nome: string;
+  tipo_codigo: string;
+  email?: string | null;
+  curso?: string | null;
+  turma_id?: string | null;
+  periodo?: number | null;
+  setor?: string | null;
+  cargo?: string | null;
+  situacao?: string;
+  observacao?: string | null;
+}

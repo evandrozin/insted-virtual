@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useCampus3D } from '../../hooks/useCampus3D';
 import { INSTED } from '../../lib/theme';
 import marcaInsted from '../../assets/insted-marca.png';
+import { MenuGestao, type Painel } from '../MenuGestao';
 
 /**
  * Simbolo institucional (orbitas), recortado da arte oficial
@@ -12,8 +13,8 @@ const MarcaInsted: React.FC = () => (
   <img className="brand-mark" src={marcaInsted} alt="Insted" draggable={false} />
 );
 
-export const Header: React.FC<{ aoAbrirCadastro?: () => void }> = ({
-  aoAbrirCadastro,
+export const Header: React.FC<{ aoAbrirPainel?: (p: Painel) => void }> = ({
+  aoAbrirPainel,
 }) => {
   const conectado = useCampus3D((s) => s.conectado);
   const servidorEm = useCampus3D((s) => s.servidorEm);
@@ -73,15 +74,7 @@ export const Header: React.FC<{ aoAbrirCadastro?: () => void }> = ({
         </div>
       )}
 
-      {aoAbrirCadastro && (
-        <button
-          className="botao-cadastro"
-          onClick={aoAbrirCadastro}
-          title="Cadastro de salas: prédio, andar, nome e capacidade"
-        >
-          Cadastro
-        </button>
-      )}
+      {aoAbrirPainel && <MenuGestao aoEscolher={aoAbrirPainel} />}
 
       <span className={`live-pill ${conectado ? 'on' : 'off'}`}>
         <i className="live-dot" />

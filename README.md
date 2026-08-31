@@ -299,6 +299,33 @@ os painéis abertos refletem a mudança sem recarregar a página.
 > autentica sozinho — não está implementado. Enquanto isso, o mais seguro é
 > manter o painel em rede interna ou atrás do Deployment Protection do Vercel.
 
+### Telas de gestão
+
+O botão **Gestão** no header abre três telas, fora do fluxo de leitura do painel:
+
+| Tela | O que faz |
+|---|---|
+| **Salas** | prédio, andar, capacidade e geometria da maquete |
+| **Pessoas** | quem circula no campus, por tipo, e quem está dentro agora |
+| **Configuração** | situação das integrações, fuso e regras de presença |
+
+**Pessoas** parte de `tipo_pessoa`, onde `conta_presenca_em_aula` decide o que a
+presença significa: aluno ocupa carteira numa aula, funcionário apenas está no
+prédio. A regra fica no tipo, não espalhada no motor.
+
+O cruzamento com a catraca é direto porque **o crachá usa o mesmo identificador
+do JACAD**. A coluna *Agora* é o conjunto de passagens do dia batido contra o
+cadastro; `sem_cadastro` no resumo aponta passagens de identificador
+desconhecido — crachá fora do ERP ou sync pendente.
+
+O campo `origem` separa quem veio do ERP de quem foi cadastrado à mão: o sync
+reescreve só os `JACAD`, então o porteiro criado pela Secretaria não some.
+
+**Configuração** é diagnóstico, não edição: mostra modo, último sync, catracas
+respondendo, fuso e regras. As **chaves de API continuam em variável de
+ambiente** e aparecem apenas mascaradas — quem tiver acesso ao painel ou ao
+banco não leva o token do ERP.
+
 ### Preparar o banco em qualquer provedor
 
 `apps/backend-api/db/schema.sql` recria tudo — estrutura, gatilhos, view, RLS e

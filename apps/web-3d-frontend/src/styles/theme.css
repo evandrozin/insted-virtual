@@ -1186,3 +1186,180 @@ body {
   font-size: 12px;
   line-height: 1.5;
 }
+
+/* --------------------------------------------------- menu de gestao */
+
+.menu-gestao { position: relative; }
+
+.menu-lista {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 260px;
+  background: var(--insted-dark-card);
+  border: 1px solid var(--insted-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  z-index: 45;
+  overflow: hidden;
+  animation: fade-in .12s ease;
+}
+.menu-lista > button {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid rgba(48, 54, 61, .55);
+  padding: 11px 15px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.menu-lista > button:hover { background: rgba(0, 201, 183, .07); }
+.menu-lista > button b {
+  font-size: 13px;
+  color: var(--insted-text-light);
+  font-weight: 600;
+}
+.menu-lista > button span {
+  font-size: 11px;
+  color: var(--insted-text-muted);
+}
+.menu-rodape {
+  padding: 9px 15px;
+  font-size: 11px;
+  color: var(--insted-text-muted);
+  background: var(--insted-dark-elev);
+}
+.menu-rodape b { color: var(--insted-primary); }
+
+/* --------------------------------------------------- selos e cartoes */
+
+.selo {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .5px;
+  padding: 2px 8px;
+  border-radius: 100px;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+.selo.ok { background: rgba(0, 201, 183, .16); color: var(--insted-primary); }
+.selo.alerta { background: rgba(245, 158, 11, .16); color: var(--severity-atencao); }
+
+.tipos-resumo {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+.tipo-cartao {
+  flex: 1 1 110px;
+  background: var(--insted-dark-elev);
+  border: 1px solid var(--insted-border);
+  border-top: 2px solid var(--insted-border);
+  border-radius: var(--radius-sm);
+  padding: 9px 12px;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: all .15s;
+}
+.tipo-cartao:hover { border-color: var(--insted-primary-hover); }
+.tipo-cartao.ativo {
+  background: var(--insted-primary-soft);
+  border-color: var(--insted-primary);
+}
+.tipo-cartao b {
+  display: block;
+  font-size: 20px;
+  line-height: 1.2;
+  color: var(--insted-text-light);
+  font-variant-numeric: tabular-nums;
+}
+.tipo-cartao span {
+  display: block;
+  font-size: 11px;
+  color: var(--insted-text-muted);
+}
+.tipo-cartao i {
+  display: block;
+  font-size: 10.5px;
+  font-style: normal;
+  color: var(--insted-primary);
+  margin-top: 2px;
+}
+
+.caixa-marcar {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  color: var(--insted-text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.caixa-marcar input { accent-color: var(--insted-primary); }
+
+.paginacao {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* --------------------------------------------------- tela de configuracao */
+
+.config-corpo { padding: 16px 20px; display: grid; gap: 14px; }
+
+.config-bloco {
+  background: var(--insted-dark-elev);
+  border: 1px solid var(--insted-border);
+  border-radius: var(--radius);
+  padding: 14px 18px 16px;
+}
+.config-bloco h3 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .6px;
+  text-transform: uppercase;
+  color: var(--insted-text-light);
+}
+.config-bloco dl {
+  display: grid;
+  grid-template-columns: 190px 1fr;
+  gap: 7px 16px;
+  margin: 0;
+  font-size: 12.5px;
+}
+.config-bloco dt { color: var(--insted-text-muted); }
+.config-bloco dd { margin: 0; color: var(--insted-text-light); }
+.config-bloco dd i { color: var(--insted-text-muted); }
+.config-bloco code {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--insted-primary);
+  background: rgba(0, 201, 183, .1);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+.config-nota {
+  margin: 12px 0 0;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--insted-text-muted);
+  border-left: 2px solid var(--insted-border);
+  padding-left: 11px;
+}
+.config-acao {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+.config-resultado { font-size: 12px; color: var(--insted-primary); }

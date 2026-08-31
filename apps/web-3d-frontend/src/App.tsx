@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { Canvas3D } from './components/Canvas3D';
 import { CadastroSalas } from './components/CadastroSalas';
+import { Configuracao } from './components/Configuracao';
+import { Pessoas } from './components/Pessoas';
+import type { Painel } from './components/MenuGestao';
 import { FloorMap } from './components/FloorMap';
 import { ControlPanel, EventTicker, Header, RoomDrawer } from './components/ControlPanel';
 import { useCampus3D } from './hooks/useCampus3D';
@@ -64,7 +67,7 @@ function TelaDeBoot() {
 
 export default function App() {
   useSocket();
-  const [cadastroAberto, setCadastroAberto] = useState(false);
+  const [painel, setPainel] = useState<Painel | null>(null);
 
   const maquete = useCampus3D((s) => s.maquete);
   const modoVisao = useCampus3D((s) => s.modoVisao);
@@ -81,7 +84,7 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <Header aoAbrirCadastro={() => setCadastroAberto(true)} />
+      <Header aoAbrirPainel={setPainel} />
 
       <div className="app-body">
         <FloorMap />
@@ -129,7 +132,9 @@ export default function App() {
 
       <EventTicker />
       <RoomDrawer />
-      {cadastroAberto && <CadastroSalas aoFechar={() => setCadastroAberto(false)} />}
+      {painel === 'SALAS' && <CadastroSalas aoFechar={() => setPainel(null)} />}
+      {painel === 'PESSOAS' && <Pessoas aoFechar={() => setPainel(null)} />}
+      {painel === 'CONFIGURACAO' && <Configuracao aoFechar={() => setPainel(null)} />}
     </div>
   );
 }
