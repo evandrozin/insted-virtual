@@ -206,20 +206,17 @@ async def listar(
 async def resumo() -> dict:
     """Quantos de cada tipo, e quantos estao no predio agora."""
     _exige_banco()
-    no_campus = await obter_store().alunos_no_campus()
-    tipos = await pessoas.resumo_por_tipo()
+    no_campus = sorted(await obter_store().alunos_no_campus())
+    tipos = await pessoas.resumo_por_tipo(no_campus)
 
-    presentes_por_tipo = {}
-    if no_campus:
-        detalhe = await pessoas.listar_pessoas(limite=1000)
-        for p in detalhe["pessoas"]:
-            if p["identificador"] in no_campus:
-                presentes_por_tipo[p["tipo"]] = presentes_por_tipo.get(p["tipo"], 0) + 1
-
-    for t in tipos:
-        t["no_campus"] = presentes_por_tipo.get(t["codigo"], 0)
-
-    return {"tipos": tipos, "no_campus_agora": len(no_campus)}
+    reconhecidos = sum(t["no_campus"] for t in tipos)
+    return {
+        "tipos": tipos,
+        "no_campus_agora": len(no_campus),
+        # Passagem cujo identificador nao esta no cadastro: cracha de alguem
+        # que o JACAD nao conhece, ou sync pendente.
+        "sem_cadastro": len(no_campus) - reconhecidos,
+    }
 
 
 @router.put("/pessoas/{identificador}")

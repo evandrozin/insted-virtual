@@ -244,22 +244,47 @@ async def sincronizar_do_jacad(alunos: List[dict]) -> Dict[str, int]:
     }
 
 
-async def resumo_por_tipo() -> List[dict]:
+async def resumo_por_tipo(no_campus: Optional[List[str]] = None) -> List[dict]:
+    """Cadastrados e presentes por tipo.
+
+    A contagem de presentes e feita no banco, cruzando com a lista de
+    identificadores que estao no campus. Contar em Python exigiria trazer
+    todas as pessoas e erraria assim que a paginacao cortasse a lista.
+    """
+    identificadores = list(no_campus or [])
     conexao = await abrir()
     try:
         linhas = await conexao.fetch(
             """
             select t.codigo, t.nome, t.plural, t.cor, t.ordem,
                    t.conta_presenca_em_aula,
-                   count(p.id) filter (where p.ativo) as ativos
+                   count(p.id) filter (where p.ativo) as ativos,
+                   count(p.id) filter (
+                       where p.ativo and p.identificador = any($1::text[])
+                   ) as no_campus
             from tipo_pessoa t
             left join pessoa p on p.tipo_codigo = t.codigo
             where t.ativo
             group by t.codigo, t.nome, t.plural, t.cor, t.ordem,
                      t.conta_presenca_em_aula
             order by t.ordem
-            """
+            """,
+            identificadores,
         )
     finally:
         await conexao.close()
     return [dict(l) for l in linhas]
+
+
+async def contar_no_campus(identificadores: List[str]) -> int:
+    """Quantos dos identificadores presentes existem no cadastro ativo."""
+    if not identificadores:
+        return 0
+    conexao = await abrir()
+    try:
+        return await conexao.fetchval(
+            "select count(*) from pessoa where ativo and identificador = any($1::text[])",
+            list(identificadores),
+        )
+    finally:
+        await conexao.close()

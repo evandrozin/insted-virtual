@@ -11,9 +11,39 @@ Direct connection e Session pooler seguem com o cache ligado.
 """
 from __future__ import annotations
 
-from urllib.parse import urlparse
+import re
+from urllib.parse import quote, urlparse
 
 from app.core.config import settings
+
+# Caracteres que, crus na senha, quebram o parse da URI.
+RESERVADOS = "@:/?#[]"
+_JA_CODIFICADO = re.compile(r"%[0-9A-Fa-f]{2}")
+
+
+def normalizar(dsn: str) -> str:
+    """Percent-encode da senha, se ela tiver caractere reservado.
+
+    Senha com "@" e comum e a URI fica com dois: o urlparse acerta o host
+    (corta no ultimo @) mas o asyncpg corta no primeiro e tenta resolver um
+    host que nao existe - o erro que sai e um getaddrinfo, que nao ajuda em
+    nada. Codificar aqui poupa o operador de saber disso.
+    """
+    if "://" not in dsn or "@" not in dsn:
+        return dsn
+
+    esquema, corpo = dsn.split("://", 1)
+    credencial, _, host = corpo.rpartition("@")
+    if not credencial or ":" not in credencial:
+        return dsn
+
+    usuario, _, senha = credencial.partition(":")
+    if not senha or _JA_CODIFICADO.search(senha):
+        return dsn
+    if not any(c in senha for c in RESERVADOS):
+        return dsn
+
+    return f"{esquema}://{usuario}:{quote(senha, safe='')}@{host}"
 
 
 def via_pooler_transacional(dsn: str) -> bool:
@@ -68,6 +98,8 @@ async def abrir(dsn: str | None = None, timeout: float = 15):
     problema = diagnosticar(dsn)
     if problema:
         raise RuntimeError(f"DATABASE_URL invalida: {problema}")
+
+    dsn = normalizar(dsn)
 
     extras = {}
     if via_pooler_transacional(dsn):
