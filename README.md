@@ -299,6 +299,27 @@ os painéis abertos refletem a mudança sem recarregar a página.
 > autentica sozinho — não está implementado. Enquanto isso, o mais seguro é
 > manter o painel em rede interna ou atrás do Deployment Protection do Vercel.
 
+### Preparar o banco em qualquer provedor
+
+`apps/backend-api/db/schema.sql` recria tudo — estrutura, gatilhos, view, RLS e
+os 63 ambientes — em qualquer PostgreSQL 15+. Não usa nada específico de
+provedor, então serve para Supabase, Neon / Vercel Postgres, Railway ou uma
+instância local:
+
+```bash
+psql "$DATABASE_URL" -f apps/backend-api/db/schema.sql
+```
+
+Ou cole o conteúdo no editor SQL do provedor. É idempotente: rodar de novo não
+duplica nada nem sobrescreve edições já feitas, e termina com uma conferência
+que deve mostrar `1 prédio, 4 pavimentos, 63 salas, 2742 lugares`.
+
+O arquivo é gerado a partir de `campus_seed.py`, então não diverge da planta
+que a aplicação usa como fallback.
+
+> Usuários **não** entram por SQL: crie a primeira conta com
+> `python criar_usuario.py`, para a senha virar hash antes de tocar o banco.
+
 ### Vercel
 
 O painel e a API vão em **dois projetos** do mesmo repositório.
@@ -329,7 +350,9 @@ A Vercel encontra sozinha a instância `app` em `app/main.py`; o `vercel.json`
 de lá só ajusta `maxDuration` e os crons. Variáveis:
 
 ```
+DATABASE_URL    = (Postgres; na Vercel use a Transaction pooler, porta 6543)
 REDIS_URL       = (injetada pela integração Redis do Marketplace)
+JWT_SECRET      = (≥ 32 caracteres, habilita o login do cadastro)
 CORS_ORIGINS    = https://SEU-PAINEL.vercel.app
 SIMULADOR_ATIVO = false
 CRON_SECRET     = (um valor aleatório qualquer)
@@ -337,6 +360,14 @@ JACAD_MODO_MOCK = false          # quando o ERP estiver ligado
 JACAD_BASE_URL  = ...
 JACAD_TOKEN     = ...
 ```
+
+> **O `.env` não é usado na Vercel.** Ele é ignorado pelo git e nunca chega ao
+> deploy — serve só para a máquina local. Na plataforma as credenciais vão em
+> *Settings → Environment Variables*, e é lá que devem ficar.
+>
+> Adicionando Postgres e Redis pelo **Marketplace** do Vercel, `POSTGRES_URL` e
+> `REDIS_URL` são injetadas sozinhas e o código já as reconhece; aí só
+> `JWT_SECRET` e as do JACAD ficam manuais.
 
 Três pontos de atenção:
 
