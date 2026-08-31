@@ -1,26 +1,50 @@
-"""Relogio da aplicacao.
+"""Relogio da aplicacao, no fuso do campus.
 
-Em producao devolve a hora real. Para apresentacoes a diretoria e possivel
-ancorar o relogio em um horario letivo (RELOGIO_DEMO=19:10) e acelerar a
-passagem do tempo (SIMULADOR_FATOR_TEMPO=4), garantindo que a maquete sempre
-tenha aulas em andamento na hora da demo.
+O servidor pode rodar em qualquer fuso - na Vercel roda em UTC - mas a grade
+horaria e escrita em hora de parede local ("aula das 19:00"). Comparar a grade
+contra o relogio do servidor faria o sistema procurar aula 4 horas fora do
+lugar em Campo Grande.
 
-Com varias instancias, a ancora precisa ser a mesma em todas - senao cada
-cold start recomecaria a contagem e os painels mostrariam horas diferentes.
-Por isso `inicializar` negocia a ancora no EstadoStore (o primeiro a chegar
-define, os demais herdam) e a guarda localmente. Assim `agora()` continua
-sincrono e sem custo, no caminho quente.
+Por isso `agora()` devolve sempre a hora de parede do campus, sem tzinfo: o
+resto do codigo compara `datetime` ingenuo com `time` da grade, e os dois
+passam a falar do mesmo fuso.
+
+Para apresentacoes e possivel ancorar o relogio num horario letivo
+(RELOGIO_DEMO=2026-08-28T19:10) e acelerar o tempo (SIMULADOR_FATOR_TEMPO=4).
+Com varias instancias a ancora e negociada no EstadoStore, senao cada cold
+start recomecaria a contagem.
 """
 from __future__ import annotations
 
 import os
 from datetime import datetime, time, timedelta
 from typing import Optional
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+# Campo Grande/MS (UTC-4). Trocavel por ambiente para outra unidade.
+FUSO_PADRAO = "America/Campo_Grande"
+
+
+def _resolver_fuso() -> ZoneInfo:
+    nome = os.getenv("TIMEZONE", "").strip() or FUSO_PADRAO
+    try:
+        return ZoneInfo(nome)
+    except (ZoneInfoNotFoundError, ValueError):
+        print(f"[relogio] fuso desconhecido: {nome!r}; usando {FUSO_PADRAO}")
+        return ZoneInfo(FUSO_PADRAO)
+
+
+_FUSO = _resolver_fuso()
 _ANCORA_CONFIG: Optional[str] = os.getenv("RELOGIO_DEMO", "").strip() or None
 _FATOR: int = max(1, int(os.getenv("SIMULADOR_FATOR_TEMPO", "1")))
 
-_inicio_real: datetime = datetime.now()
+
+def _relogio_do_campus() -> datetime:
+    """Hora de parede em Campo Grande, independente do fuso do servidor."""
+    return datetime.now(_FUSO).replace(tzinfo=None)
+
+
+_inicio_real: datetime = _relogio_do_campus()
 _inicio_virtual: Optional[datetime] = None
 
 
@@ -37,7 +61,7 @@ def _interpretar_ancora(valor: str, hoje: datetime) -> Optional[datetime]:
         h, m = (valor.split(":") + ["0"])[:2]
         return datetime.combine(hoje.date(), time(int(h), int(m)))
     try:
-        return datetime.fromisoformat(valor)
+        return datetime.fromisoformat(valor).replace(tzinfo=None)
     except ValueError:
         print(f"[relogio] RELOGIO_DEMO invalido: {valor!r}; usando hora real")
         return None
@@ -50,14 +74,13 @@ if _ANCORA_CONFIG:
 async def inicializar(store) -> None:
     """Alinha a ancora do relogio entre as instancias.
 
-    Sem modo demo nao ha o que combinar: todas usam a hora real.
+    Sem modo demo nao ha o que combinar: todas usam a hora real do campus.
     """
     global _inicio_real, _inicio_virtual
 
     if _inicio_virtual is None and _FATOR == 1:
         return
 
-    # Grava a origem (instante real + instante virtual) como uma unica marca.
     marca = f"{_inicio_real.isoformat()}|{(_inicio_virtual or _inicio_real).isoformat()}"
     await store.definir_ancora_relogio(marca)
 
@@ -74,12 +97,17 @@ async def inicializar(store) -> None:
 
 
 def agora() -> datetime:
+    """Hora de parede do campus, ja com o modo demo aplicado."""
     if _inicio_virtual is None and _FATOR == 1:
-        return datetime.now()
+        return _relogio_do_campus()
 
-    decorrido = datetime.now() - _inicio_real
+    decorrido = _relogio_do_campus() - _inicio_real
     base = _inicio_virtual or _inicio_real
     return base + timedelta(seconds=decorrido.total_seconds() * _FATOR)
+
+
+def fuso() -> str:
+    return str(_FUSO)
 
 
 def em_modo_demo() -> bool:
@@ -88,9 +116,9 @@ def em_modo_demo() -> bool:
 
 def descricao() -> str:
     if not em_modo_demo():
-        return "tempo real"
+        return f"tempo real ({_FUSO})"
     if _inicio_virtual is None:
-        return f"demo (fator {_FATOR}x)"
+        return f"demo (fator {_FATOR}x, {_FUSO})"
     dias = ["seg", "ter", "qua", "qui", "sex", "sab", "dom"]
     ancora = f"{dias[_inicio_virtual.weekday()]} {_inicio_virtual.strftime('%d/%m %H:%M')}"
-    return f"demo (ancora {ancora}, fator {_FATOR}x)"
+    return f"demo (ancora {ancora}, fator {_FATOR}x, {_FUSO})"

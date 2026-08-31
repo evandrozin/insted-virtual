@@ -11,6 +11,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Dict, List, Optional
 
+from app.core import clock
+
 from app.models.campus import CadeiraModel, SalaModel
 from app.models.enums import StatusCadeira
 
@@ -74,7 +76,7 @@ class EngineAlocacaoInsted:
             cadeira.aluno_ra = aluno_ra
 
         cadeira.status = StatusCadeira.OCUPADA
-        cadeira.ocupada_em = (momento or datetime.now()).isoformat()
+        cadeira.ocupada_em = (momento or clock.agora()).isoformat()
         return cadeira
 
     def registrar_saida_catraca(self, aluno_ra: str) -> Optional[CadeiraModel]:

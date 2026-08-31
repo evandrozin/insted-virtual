@@ -17,6 +17,7 @@ import threading
 from datetime import datetime
 from typing import Dict, List, Optional, Set
 
+from app.core import clock
 from app.data.campus_seed import construir_catracas, construir_pavimentos
 from app.models.academico import AlunoModel, AulaModel, TurmaModel
 from app.models.campus import CadeiraModel, CatracaModel, PavimentoModel, SalaModel
@@ -89,7 +90,7 @@ class CampusState:
                 self.aulas_por_sala.setdefault(aula.sala_id, []).append(aula)
                 self.aulas_por_turma.setdefault(aula.turma_id, []).append(aula)
 
-            self.ultima_sync_jacad = datetime.now()
+            self.ultima_sync_jacad = clock.agora()
 
     # -- consultas ----------------------------------------------------------
     def sala(self, sala_id: str) -> Optional[SalaModel]:

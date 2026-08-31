@@ -37,6 +37,11 @@ class Settings:
     LIMIAR_BAIXA_PRESENCA: int = _int("LIMIAR_BAIXA_PRESENCA", 60)
     CATRACA_TIMEOUT_S: int = _int("CATRACA_TIMEOUT_S", 900)
 
+    # --- Fuso do campus ----------------------------------------------------
+    # A grade horaria e hora de parede local. O servidor pode rodar em UTC
+    # (Vercel), entao o fuso precisa ser explicito.
+    TIMEZONE: str = os.getenv("TIMEZONE", "America/Campo_Grande")
+
     # --- Autenticacao ------------------------------------------------------
     # Segredo de assinatura dos tokens de sessao. Sem ele o login fica
     # desligado e o cadastro segue somente-leitura.

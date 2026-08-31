@@ -350,6 +350,7 @@ A Vercel encontra sozinha a instância `app` em `app/main.py`; o `vercel.json`
 de lá só ajusta `maxDuration` e os crons. Variáveis:
 
 ```
+TIMEZONE        = America/Campo_Grande
 DATABASE_URL    = (Postgres; na Vercel use a Transaction pooler, porta 6543)
 REDIS_URL       = (injetada pela integração Redis do Marketplace)
 JWT_SECRET      = (≥ 32 caracteres, habilita o login do cadastro)
@@ -361,6 +362,10 @@ JACAD_BASE_URL  = ...
 JACAD_TOKEN     = ...
 ```
 
+> **`TIMEZONE` é obrigatório na Vercel.** O servidor roda em UTC e a grade é
+> hora de parede local: sem o fuso, uma aula das 19:00 em Campo Grande seria
+> procurada às 19:00 UTC, quatro horas fora do lugar.
+>
 > **O `.env` não é usado na Vercel.** Ele é ignorado pelo git e nunca chega ao
 > deploy — serve só para a máquina local. Na plataforma as credenciais vão em
 > *Settings → Environment Variables*, e é lá que devem ficar.
