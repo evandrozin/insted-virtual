@@ -321,10 +321,23 @@ desconhecido — crachá fora do ERP ou sync pendente.
 O campo `origem` separa quem veio do ERP de quem foi cadastrado à mão: o sync
 reescreve só os `JACAD`, então o porteiro criado pela Secretaria não some.
 
-**Configuração** é diagnóstico, não edição: mostra modo, último sync, catracas
-respondendo, fuso e regras. As **chaves de API continuam em variável de
-ambiente** e aparecem apenas mascaradas — quem tiver acesso ao painel ou ao
-banco não leva o token do ERP.
+**Configuração** tem duas abas. *Situação* mostra modo, último sync, catracas
+respondendo, fuso e regras. *Ajustes* edita os parâmetros operacionais, que
+valem sem reiniciar.
+
+A resolução é em três camadas: **valor no banco › variável de ambiente ›
+padrão do código**. Limpar um campo devolve o parâmetro ao ambiente, que segue
+sendo o padrão do deploy. Toda alteração registra autor e o antes/depois.
+
+O que **não** passa por aí, de propósito:
+
+| | Por quê |
+|---|---|
+| `DATABASE_URL`, `JWT_SECRET`, `REDIS_URL` | são necessários antes de existir conexão com o banco — guardar a senha do banco dentro do banco é circular |
+| `JACAD_TOKEN` | segredo que não deve ser legível por quem abre o painel |
+
+Alguns ajustes (`TIMEZONE`, `SIMULADOR_ATIVO`, `MAX_EVENTOS_FEED`) são lidos no
+boot; a tela marca esses como *exige reinício*.
 
 ### Preparar o banco em qualquer provedor
 

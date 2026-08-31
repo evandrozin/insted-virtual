@@ -2,6 +2,7 @@
 import type {
   ConfigLogin,
   Integracoes,
+  Parametro,
   ListaPessoas,
   Pessoa,
   PessoaEntrada,
@@ -151,3 +152,14 @@ export const sincronizarPessoas = (token: string) =>
            sincronizado_em: string }>(
     'POST', '/pessoas/sincronizar', undefined, token,
   );
+
+export const buscarParametros = () =>
+  get<{ parametros: Parametro[] }>('/config/parametros');
+
+export const gravarParametro = (chave: string, valor: string | null, token: string) =>
+  enviar<{
+    chave: string;
+    valor_efetivo: string | number | boolean | null;
+    origem: 'banco' | 'ambiente';
+    exige_reinicio: boolean;
+  }>('PUT', `/config/parametros/${encodeURIComponent(chave)}`, { valor }, token);

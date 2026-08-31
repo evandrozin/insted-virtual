@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1 import (
     academico, alocacao, cadastro, catracas, configuracao, cron, presenca, ws
 )
-from app.core import clock
+from app.core import clock, parametros
 from app.core.config import settings
 from app.services.campus_state import estado
 from app.services.dashboard_service import servico_dashboard
@@ -43,12 +43,12 @@ async def _loop_reconciliacao() -> None:
         except Exception as erro:
             print(f"[reconciliacao] erro ignorado: {erro}")
 
-        await asyncio.sleep(settings.TICK_DASHBOARD_S)
+        await asyncio.sleep(parametros.tick_dashboard_s())
 
 
 async def _loop_sync_jacad() -> None:
     while True:
-        await asyncio.sleep(settings.JACAD_SYNC_INTERVAL_S)
+        await asyncio.sleep(parametros.jacad_sync_interval_s())
         try:
             resumo = motor.sincronizar_jacad()
             print(f"[jacad] resync: {resumo}")
@@ -66,6 +66,9 @@ async def lifespan(app: FastAPI):
 
     await clock.inicializar(store)
     print(f"[boot] relogio: {clock.descricao()}")
+
+    carregados = await parametros.recarregar()
+    print(f"[boot] parametros vindos do banco: {carregados}")
 
     await _carregar_topologia()
 

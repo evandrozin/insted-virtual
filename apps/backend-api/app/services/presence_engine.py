@@ -16,7 +16,7 @@ import uuid
 from datetime import datetime, timedelta
 from typing import List, Optional, Tuple
 
-from app.core import clock
+from app.core import clock, parametros
 from app.core.config import settings
 from app.models.academico import AulaModel, EventoCatraca, RegistroPresenca
 from app.models.dashboard import Alerta
@@ -31,8 +31,16 @@ from app.services.campus_state import CampusState, estado
 from app.services.jacad_client import obter_client
 from app.services.store import obter_store
 
-TOLERANCIA = timedelta(minutes=settings.TOLERANCIA_ATRASO_MIN)
-JANELA_CHEGADA = timedelta(minutes=settings.JANELA_CHEGADA_ANTECIPADA_MIN)
+# Lidos a cada uso, e nao na importacao: assim um ajuste pela tela vale sem
+# reiniciar o processo.
+
+
+def _tolerancia() -> timedelta:
+    return timedelta(minutes=parametros.tolerancia_atraso_min())
+
+
+def _janela_chegada() -> timedelta:
+    return timedelta(minutes=parametros.janela_chegada_min())
 
 _EM_AULA = (StatusPresenca.PRESENTE, StatusPresenca.ATRASADO)
 
@@ -126,7 +134,7 @@ class MotorPresenca:
                 continue
             inicio = _dt_na_data(agora, aula.hora_inicio)
             fim = _dt_na_data(agora, aula.hora_fim)
-            if inicio - JANELA_CHEGADA <= agora <= fim:
+            if inicio - _janela_chegada() <= agora <= fim:
                 abertas.append(aula)
         return abertas
 
@@ -232,7 +240,7 @@ class MotorPresenca:
             aula = self.state.aulas.get(aula_id)
             if aula is None:
                 continue
-            limite = _dt_na_data(agora, aula.hora_inicio) + TOLERANCIA
+            limite = _dt_na_data(agora, aula.hora_inicio) + _tolerancia()
             if agora < limite:
                 continue
             for registro in await self.store.presencas_da_aula(aula_id):
@@ -349,7 +357,7 @@ class MotorPresenca:
         registro.atraso_minutos = atraso
         registro.status = (
             StatusPresenca.ATRASADO
-            if agora > inicio + TOLERANCIA
+            if agora > inicio + _tolerancia()
             else StatusPresenca.PRESENTE
         )
 
@@ -421,7 +429,7 @@ class MotorPresenca:
                 continue
 
             inicio = _dt_na_data(agora, aula.hora_inicio)
-            if agora < inicio + TOLERANCIA:
+            if agora < inicio + _tolerancia():
                 continue  # so avalia depois da tolerancia de entrada
 
             registros = await self.store.presencas_da_aula(aula_id)
@@ -449,7 +457,7 @@ class MotorPresenca:
                     f"{esperados} matriculados registrou entrada.",
                     agora, sala.id, dedupe=f"{aula_id}:vazia",
                 )
-            elif taxa < settings.LIMIAR_BAIXA_PRESENCA:
+            elif taxa < parametros.limiar_baixa_presenca():
                 await self._alerta(
                     TipoAlerta.BAIXA_PRESENCA, SeveridadeAlerta.ATENCAO,
                     f"Presenca de {taxa:.0f}% em {sala.nome}",
@@ -470,7 +478,7 @@ class MotorPresenca:
         await self._avaliar_catracas(agora)
 
     async def _avaliar_catracas(self, agora: datetime) -> None:
-        limite = timedelta(seconds=settings.CATRACA_TIMEOUT_S)
+        limite = timedelta(seconds=parametros.catraca_timeout_s())
         for cid, info in (await self.store.estado_catracas()).items():
             ultimo_iso = info.get("ultimo_evento_em")
             if not ultimo_iso:

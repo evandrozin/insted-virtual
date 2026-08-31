@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { buscarIntegracoes, ErroApi, testarJacad } from '../lib/api';
+import { buscarIntegracoes, buscarParametros, ErroApi, testarJacad } from '../lib/api';
+import { Parametros } from './Parametros';
 import { useSessao } from '../hooks/useSessao';
 import { hhmm } from '../lib/theme';
-import type { Integracoes } from '../lib/types';
+import type { Integracoes, Parametro } from '../lib/types';
 
 /**
  * Situacao das integracoes.
@@ -14,6 +15,8 @@ import type { Integracoes } from '../lib/types';
  */
 export const Configuracao: React.FC<{ aoFechar: () => void }> = ({ aoFechar }) => {
   const [dados, setDados] = useState<Integracoes | null>(null);
+  const [parametros, setParametros] = useState<Parametro[]>([]);
+  const [aba, setAba] = useState<'situacao' | 'ajustes'>('situacao');
   const [erro, setErro] = useState<string | null>(null);
   const [teste, setTeste] = useState<string | null>(null);
   const [testando, setTestando] = useState(false);
@@ -24,10 +27,14 @@ export const Configuracao: React.FC<{ aoFechar: () => void }> = ({ aoFechar }) =
 
   useEffect(() => {
     let cancelado = false;
-    const carregar = () =>
+    const carregar = () => {
       buscarIntegracoes()
         .then((d) => !cancelado && setDados(d))
         .catch((e) => !cancelado && setErro(String(e)));
+      buscarParametros()
+        .then((d) => !cancelado && setParametros(d.parametros))
+        .catch(() => { /* sem banco: a aba de ajustes fica vazia */ });
+    };
     carregar();
     // O relogio e as catracas mudam sozinhos; a tela acompanha.
     const id = window.setInterval(carregar, 10_000);
@@ -79,16 +86,48 @@ export const Configuracao: React.FC<{ aoFechar: () => void }> = ({ aoFechar }) =
           </button>
           <h2>Configuração</h2>
           <p>
-            Situação das integrações. As chaves ficam em variável de ambiente e
-            não são exibidas nem editáveis por aqui.
+            Situação das integrações e ajustes operacionais. As chaves de API
+            ficam em variável de ambiente e não passam por aqui.
           </p>
+
+          <div className="view-toggle" style={{ marginTop: 14 }}>
+            <button
+              className={aba === 'situacao' ? 'active' : ''}
+              onClick={() => setAba('situacao')}
+            >
+              Situação
+            </button>
+            <button
+              className={aba === 'ajustes' ? 'active' : ''}
+              onClick={() => setAba('ajustes')}
+            >
+              Ajustes {parametros.length > 0 && `(${parametros.length})`}
+            </button>
+          </div>
         </header>
 
         <div className="cadastro-corpo config-corpo">
           {erro && <div className="empty-state">Não foi possível ler: {erro}</div>}
           {!erro && !dados && <div className="empty-state">Carregando…</div>}
 
-          {dados && (
+          {aba === 'ajustes' && (
+            parametros.length > 0 ? (
+              <Parametros
+                itens={parametros}
+                aoMudar={() => {
+                  buscarParametros().then((d) => setParametros(d.parametros));
+                  buscarIntegracoes().then(setDados);
+                }}
+              />
+            ) : (
+              <div className="empty-state">
+                Os ajustes exigem o cadastro em banco. Sem <code>DATABASE_URL</code>,
+                os valores vêm apenas das variáveis de ambiente.
+              </div>
+            )
+          )}
+
+          {aba === 'situacao' && dados && (
             <>
               <section className="config-bloco">
                 <h3>
@@ -227,8 +266,9 @@ export const Configuracao: React.FC<{ aoFechar: () => void }> = ({ aoFechar }) =
                   <dd>após {Math.round(dados.regras.catraca_timeout_s / 60)} min</dd>
                 </dl>
                 <p className="config-nota">
-                  Ajustáveis por variável de ambiente. Mudá-las altera como a
-                  presença é classificada, então ficam fora da edição pela tela.
+                  Ajustáveis na aba <b>Ajustes</b>. Mudá-las altera como a
+                  presença é classificada, então toda alteração fica registrada
+                  com autor.
                 </p>
               </section>
             </>

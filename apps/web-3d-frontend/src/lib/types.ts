@@ -379,3 +379,22 @@ export interface PessoaEntrada {
   situacao?: string;
   observacao?: string | null;
 }
+
+/** Parametro operacional editavel pela tela. */
+export interface Parametro {
+  chave: string;
+  valor: string | null;
+  tipo: 'INTEIRO' | 'BOOLEANO' | 'TEXTO';
+  categoria: 'PRESENCA' | 'INTEGRACAO' | 'SISTEMA';
+  rotulo: string;
+  descricao: string | null;
+  unidade: string | null;
+  minimo: number | null;
+  maximo: number | null;
+  ordem: number;
+  atualizado_por: string | null;
+  atualizado_em: string | null;
+  valor_efetivo: string | number | boolean | null;
+  origem: 'banco' | 'ambiente';
+  exige_reinicio: boolean;
+}

@@ -13,6 +13,7 @@ import random
 from datetime import time
 from typing import List, Protocol, Set
 
+from app.core import parametros
 from app.core.config import settings
 from app.data.campus_seed import SALAS_POR_PAVIMENTO
 from app.models.academico import AlunoModel, AulaModel, TurmaModel
@@ -258,6 +259,8 @@ class JacadRestClient:
 
 
 def obter_client() -> JacadClient:
-    if settings.JACAD_MODO_MOCK or not settings.JACAD_BASE_URL:
+    # O endereco e o modo podem vir do banco; o token continua so no ambiente.
+    base_url = parametros.jacad_base_url()
+    if parametros.jacad_modo_mock() or not base_url:
         return JacadMockClient()
-    return JacadRestClient(settings.JACAD_BASE_URL, settings.JACAD_TOKEN)
+    return JacadRestClient(base_url, settings.JACAD_TOKEN)

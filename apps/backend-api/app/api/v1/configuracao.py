@@ -11,7 +11,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 
-from app.core import clock
+from app.core import clock, parametros
 from app.core.config import settings
 from app.data import pessoa_repository as pessoas
 from app.api.v1.cadastro import requer_edicao, usuario_atual
@@ -53,11 +53,11 @@ async def integracoes() -> dict:
 
     return {
         "jacad": {
-            "modo": "simulado" if settings.JACAD_MODO_MOCK else "integrado",
-            "base_url": settings.JACAD_BASE_URL or None,
+            "modo": "simulado" if parametros.jacad_modo_mock() else "integrado",
+            "base_url": parametros.jacad_base_url() or None,
             "chave_configurada": bool(settings.JACAD_TOKEN),
             "chave": _mascarar(settings.JACAD_TOKEN),
-            "intervalo_sync_min": round(settings.JACAD_SYNC_INTERVAL_S / 60),
+            "intervalo_sync_min": round(parametros.jacad_sync_interval_s() / 60),
             "ultima_sync": (
                 estado.ultima_sync_jacad.isoformat()
                 if estado.ultima_sync_jacad else None
@@ -67,7 +67,7 @@ async def integracoes() -> dict:
             "aulas": len(estado.aulas),
         },
         "catracas": {
-            "modo": "simulado" if settings.SIMULADOR_ATIVO else "integrado",
+            "modo": "simulado" if parametros.simulador_ativo() else "integrado",
             "total": len(estado.catracas),
             "online": online,
             "entradas_hoje": contadores["entradas"],
@@ -90,10 +90,10 @@ async def integracoes() -> dict:
             "loop_interno": settings.LOOP_INTERNO,
         },
         "regras": {
-            "tolerancia_atraso_min": settings.TOLERANCIA_ATRASO_MIN,
-            "janela_chegada_min": settings.JANELA_CHEGADA_ANTECIPADA_MIN,
-            "limiar_baixa_presenca": settings.LIMIAR_BAIXA_PRESENCA,
-            "catraca_timeout_s": settings.CATRACA_TIMEOUT_S,
+            "tolerancia_atraso_min": parametros.tolerancia_atraso_min(),
+            "janela_chegada_min": parametros.janela_chegada_min(),
+            "limiar_baixa_presenca": parametros.limiar_baixa_presenca(),
+            "catraca_timeout_s": parametros.catraca_timeout_s(),
         },
     }
 
@@ -111,13 +111,13 @@ async def testar_jacad(usuario: dict = Depends(requer_edicao)) -> dict:
     except Exception as erro:
         return {
             "ok": False,
-            "modo": "simulado" if settings.JACAD_MODO_MOCK else "integrado",
+            "modo": "simulado" if parametros.jacad_modo_mock() else "integrado",
             "erro": str(erro),
         }
 
     return {
         "ok": True,
-        "modo": "simulado" if settings.JACAD_MODO_MOCK else "integrado",
+        "modo": "simulado" if parametros.jacad_modo_mock() else "integrado",
         "alunos": len(alunos),
         "turmas": len(turmas),
         "aulas": len(aulas),
@@ -253,3 +253,85 @@ async def sincronizar(usuario: dict = Depends(requer_edicao)) -> dict:
     resumo = await pessoas.sincronizar_do_jacad(alunos)
     resumo["sincronizado_em"] = clock.agora().isoformat()
     return resumo
+
+
+# ---------------------------------------------------------------------------
+# Parametros operacionais
+# ---------------------------------------------------------------------------
+
+class ParametroEntrada(BaseModel):
+    # Nulo devolve o parametro ao valor do ambiente.
+    valor: Optional[str] = None
+
+
+@router.get("/config/parametros")
+async def listar_parametros() -> dict:
+    """Catalogo com valor efetivo e de onde ele veio."""
+    _exige_banco()
+    from app.core import parametros as p
+
+    itens = []
+    for linha in await pessoas.listar_parametros():
+        chave = linha["chave"]
+        itens.append({
+            **linha,
+            "minimo": float(linha["minimo"]) if linha["minimo"] is not None else None,
+            "maximo": float(linha["maximo"]) if linha["maximo"] is not None else None,
+            "valor_efetivo": p.obter(chave),
+            "origem": p.origem(chave),
+            "exige_reinicio": chave in p.EXIGEM_REINICIO,
+        })
+    return {"parametros": itens}
+
+
+@router.put("/config/parametros/{chave}")
+async def gravar_parametro(
+    chave: str, entrada: ParametroEntrada, usuario: dict = Depends(requer_edicao)
+) -> dict:
+    _exige_banco()
+    from app.core import parametros as p
+
+    catalogo = {i["chave"]: i for i in await pessoas.listar_parametros()}
+    definicao = catalogo.get(chave.upper())
+    if definicao is None:
+        raise HTTPException(404, f"Parametro desconhecido: {chave}")
+
+    valor = entrada.valor
+    if valor is not None and valor.strip() == "":
+        valor = None  # limpar devolve ao ambiente
+
+    if valor is not None:
+        tipo = definicao["tipo"]
+        if tipo == "INTEIRO":
+            try:
+                numero = int(valor)
+            except ValueError:
+                raise HTTPException(422, f"{definicao['rotulo']} precisa ser um numero inteiro.")
+            if definicao["minimo"] is not None and numero < definicao["minimo"]:
+                raise HTTPException(
+                    422, f"{definicao['rotulo']}: minimo {int(definicao['minimo'])}."
+                )
+            if definicao["maximo"] is not None and numero > definicao["maximo"]:
+                raise HTTPException(
+                    422, f"{definicao['rotulo']}: maximo {int(definicao['maximo'])}."
+                )
+            valor = str(numero)
+        elif tipo == "BOOLEANO":
+            valor = "true" if valor.strip().lower() in {"1", "true", "yes", "sim"} else "false"
+
+    await pessoas.gravar_parametro(chave.upper(), valor, usuario.get("nome") or usuario["email"])
+    carregados = await p.recarregar()
+
+    return {
+        "chave": chave.upper(),
+        "valor_efetivo": p.obter(chave.upper()),
+        "origem": p.origem(chave.upper()),
+        "exige_reinicio": chave.upper() in p.EXIGEM_REINICIO,
+        "parametros_no_banco": carregados,
+    }
+
+
+@router.get("/config/parametros/{chave}/historico")
+async def historico_parametro(chave: str, usuario: dict = Depends(usuario_atual)) -> dict:
+    _exige_banco()
+    return {"chave": chave.upper(), "historico": await pessoas.historico_parametro(chave.upper())}

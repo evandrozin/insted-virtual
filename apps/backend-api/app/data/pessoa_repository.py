@@ -288,3 +288,71 @@ async def contar_no_campus(identificadores: List[str]) -> int:
         )
     finally:
         await conexao.close()
+
+
+# ---------------------------------------------------------------------------
+# Parametros operacionais
+# ---------------------------------------------------------------------------
+
+async def listar_parametros() -> List[dict]:
+    conexao = await abrir()
+    try:
+        linhas = await conexao.fetch(
+            """
+            select chave, valor, tipo, categoria, rotulo, descricao, unidade,
+                   minimo, maximo, ordem, atualizado_por, atualizado_em
+            from parametro
+            order by categoria, ordem, chave
+            """
+        )
+    finally:
+        await conexao.close()
+    return [dict(l) for l in linhas]
+
+
+async def gravar_parametro(chave: str, valor: Optional[str], autor: str) -> dict:
+    """Grava o valor e registra quem mudou. Valor nulo devolve ao ambiente."""
+    conexao = await abrir()
+    try:
+        async with conexao.transaction():
+            antes = await conexao.fetchval(
+                "select valor from parametro where chave = $1", chave
+            )
+            linha = await conexao.fetchrow(
+                """
+                update parametro
+                   set valor = $2, atualizado_por = $3, atualizado_em = now()
+                 where chave = $1
+                returning *
+                """,
+                chave, valor, autor,
+            )
+            if linha is None:
+                raise ValueError(f"Parametro desconhecido: {chave!r}")
+            await conexao.execute(
+                """
+                insert into parametro_auditoria
+                    (chave, valor_antes, valor_depois, usuario_nome)
+                values ($1, $2, $3, $4)
+                """,
+                chave, antes, valor, autor,
+            )
+    finally:
+        await conexao.close()
+    return dict(linha)
+
+
+async def historico_parametro(chave: str, limite: int = 20) -> List[dict]:
+    conexao = await abrir()
+    try:
+        linhas = await conexao.fetch(
+            """
+            select valor_antes, valor_depois, usuario_nome, criado_em
+            from parametro_auditoria
+            where chave = $1 order by criado_em desc limit $2
+            """,
+            chave, limite,
+        )
+    finally:
+        await conexao.close()
+    return [dict(l) for l in linhas]
