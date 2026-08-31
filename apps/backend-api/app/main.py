@@ -18,6 +18,8 @@ from app.services.presence_engine import motor
 from app.services.realtime import difundir, iniciar_relay, manager
 from app.services.store import obter_store
 
+VERSAO = "2.0.0"
+
 _tarefas: list[asyncio.Task] = []
 
 
@@ -156,7 +158,7 @@ app = FastAPI(
         "cruza a grade horaria do JACAD com as passagens de catraca e projeta "
         "o resultado na maquete virtual 3D."
     ),
-    version="2.0.0",
+    version=VERSAO,
     lifespan=lifespan,
 )
 
@@ -178,13 +180,28 @@ for router in (
 app.include_router(ws.router)
 
 
+
 @app.get("/health", tags=["infra"])
 async def health() -> dict:
+    """Saude e identidade do build.
+
+    `versao` e `commit` existem para conferir qual codigo esta no ar sem ter
+    que deduzir pelas rotas - foi assim que descobrimos que a Vercel servia um
+    build de tres dias antes.
+    """
+    import os
+
+    commit = os.getenv("VERCEL_GIT_COMMIT_SHA", "")
     return {
         "status": "ok",
         "servico": settings.PROJECT_NAME,
+        "versao": VERSAO,
+        "commit": commit[:7] if commit else "local",
+        "rotas": len(app.routes),
         "relogio": clock.agora().isoformat(),
+        "fuso": clock.fuso(),
         "estado": obter_store().nome,
-        "simulador": settings.SIMULADOR_ATIVO,
+        "banco": bool(settings.DATABASE_URL),
+        "simulador": parametros.simulador_ativo(),
         "paineis_conectados": manager.total,
     }
