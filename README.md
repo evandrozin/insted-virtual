@@ -426,11 +426,27 @@ Três pontos de atenção:
   e a reconciliação — que abre e encerra aulas pela grade — ficaria parada entre
   as execuções. Nesse caso prefira a alternativa abaixo.
 
-### Alternativa com processo contínuo
+### Alternativa com processo contínuo (recomendada no plano Hobby)
 
-Render, Railway ou um container: nada precisa mudar. Sem `REDIS_URL` o
-`LOOP_INTERNO` cuida da reconciliação a cada 5 s e o simulador funciona, o que
-mantém o modo de apresentação intacto.
+`render.yaml` na raiz publica o backend no Render com um comando: *New →
+Blueprint*, apontando para o repositório. Ele já define `rootDir`,
+`healthCheckPath` e o fuso; `DATABASE_URL`, `JWT_SECRET` e `CORS_ORIGINS`
+ficam marcados `sync: false` e são preenchidos no painel, nunca no repositório.
+
+Por que vale a pena: com processo contínuo o `LOOP_INTERNO` reconcilia a cada
+`TICK_DASHBOARD_S`, sem depender de cron. **No plano Hobby da Vercel o cron roda
+uma vez por dia**, então as aulas não abririam nem fechariam sozinhas ao longo
+do dia — que é justamente o que a diretoria precisa ver.
+
+Railway ou um container funcionam igual: mesmo `startCommand`, mesmas variáveis.
+O painel pode continuar na Vercel, apontando para o backend por `VITE_API_URL`
+e `VITE_WS_URL`.
+
+#### Conferir qual build está no ar
+
+`GET /health` devolve `versao` e `commit`. Se a versão não bater com a do
+repositório, o deploy não chegou — foi assim que descobrimos um build parado
+três dias atrás enquanto o repositório já tinha seis commits novos.
 
 ---
 

@@ -1,0 +1,54 @@
+# Alternativa de publicacao com processo continuo.
+#
+# Por que existe: na Vercel o backend roda como funcao, e no plano Hobby o cron
+# executa uma vez por dia - a reconciliacao que abre e fecha as aulas ficaria
+# parada entre as execucoes. Aqui o processo fica de pe e o loop interno roda a
+# cada TICK_DASHBOARD_S, como em desenvolvimento.
+#
+# Uso: no Render, New > Blueprint, apontando para este repositorio.
+# As variaveis marcadas sync:false sao preenchidas no painel, nunca aqui.
+
+services:
+  - type: web
+    name: insted-backend
+    runtime: python
+    region: oregon
+    plan: free
+    rootDir: apps/backend-api
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+
+    envVars:
+      # A grade e hora de parede local; sem isso o servidor procuraria as
+      # aulas no fuso dele.
+      - key: TIMEZONE
+        value: America/Campo_Grande
+
+      # Processo continuo: o loop interno cuida da reconciliacao.
+      - key: LOOP_INTERNO
+        value: "true"
+
+      # Enquanto nao houver catracas reais ligadas.
+      - key: SIMULADOR_ATIVO
+        value: "true"
+
+      # Preenchidos no painel do Render (Environment), nunca no repositorio.
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+
+      # Opcional: so e necessario com mais de uma instancia.
+      - key: REDIS_URL
+        sync: false
+
+      # Quando o ERP estiver acessivel.
+      - key: JACAD_MODO_MOCK
+        value: "true"
+      - key: JACAD_BASE_URL
+        sync: false
+      - key: JACAD_TOKEN
+        sync: false
