@@ -1,18 +1,19 @@
 -- ===========================================================================
 -- Insted Virtual Campus - banco completo
 --
--- Recria o cadastro do zero em qualquer PostgreSQL 15+: Supabase, Neon /
--- Vercel Postgres, Railway ou uma instancia local. Nao usa nada especifico
--- de provedor.
+-- Recria tudo do zero em qualquer PostgreSQL 15+: Supabase, Neon / Vercel
+-- Postgres, Railway ou uma instancia local. Nao usa nada especifico de
+-- provedor.
 --
 -- Uso:
 --   psql "$DATABASE_URL" -f db/schema.sql
 -- ou cole no editor SQL do provedor.
 --
+-- Idempotente: rodar de novo nao duplica nada nem sobrescreve edicoes feitas.
 -- Gerado a partir de app/data/campus_seed.py (plantas Sigma rev. 05/2025).
 -- ===========================================================================
 
--- ---------------------------------------------------------------- estrutura
+-- --------------------------------------------------------- campus fisico
 
 create table if not exists predio (
     id            smallint generated always as identity primary key,
@@ -23,8 +24,6 @@ create table if not exists predio (
     criado_em     timestamptz not null default now(),
     atualizado_em timestamptz not null default now()
 );
-
-comment on table predio is 'Predios do campus. Hoje ha um; o modelo ja aceita mais.';
 
 create table if not exists pavimento (
     id            smallint generated always as identity primary key,
@@ -42,29 +41,23 @@ create table if not exists pavimento (
 
 comment on column pavimento.ordem is
     'Terreo = 0, sobe a cada andar. Define o empilhamento na maquete.';
-comment on column pavimento.altura_y is
-    'Cota do piso em metros, usada como eixo Y no 3D.';
 
 create table if not exists sala (
     id                 integer generated always as identity primary key,
     pavimento_id       smallint not null references pavimento (id) on delete cascade,
-
     codigo             text not null unique,
     codigo_planta      text,
     codigo_ensalamento text,
-
     nome               text not null,
     tipo               text not null,
     capacidade         smallint not null default 0,
     rack_id            text,
     ativa              boolean not null default true,
-
     -- Geometria da maquete, em metros, origem no centro do predio
     pos_x              numeric(8, 2),
     pos_z              numeric(8, 2),
     largura            numeric(8, 2),
     profundidade       numeric(8, 2),
-
     observacao         text,
     criado_em          timestamptz not null default now(),
     atualizado_em      timestamptz not null default now(),
@@ -79,22 +72,70 @@ create table if not exists sala (
 
 comment on column sala.codigo is
     'Chave usada pelo motor de presenca e pela maquete (ex.: S1_08).';
-comment on column sala.codigo_planta is
-    'Como a sala aparece na prancha Sigma (ex.: SALA 08).';
 comment on column sala.codigo_ensalamento is
     'Codigo da Secretaria (01A/01B/01C). A preencher.';
-comment on column sala.capacidade is
-    'Numero de carteiras. Zero = ambiente sem assentos.';
 
 create index if not exists sala_por_pavimento on sala (pavimento_id);
 create index if not exists sala_por_tipo on sala (tipo) where ativa;
 create index if not exists sala_por_ensalamento on sala (codigo_ensalamento)
     where codigo_ensalamento is not null;
 
--- --------------------------------------------------------------- usuarios
+-- ------------------------------------------------------------- pessoas
 
--- Senha em hash scrypt: scrypt$n$r$p$<salt_b64>$<hash_b64>.
--- Crie a primeira conta com `python criar_usuario.py`, nunca por INSERT.
+create table if not exists tipo_pessoa (
+    codigo                 text primary key,
+    nome                   text not null,
+    plural                 text not null,
+    conta_presenca_em_aula boolean not null default false,
+    cor                    text,
+    ordem                  smallint not null default 100,
+    ativo                  boolean not null default true,
+    criado_em              timestamptz not null default now(),
+    atualizado_em          timestamptz not null default now(),
+
+    constraint tipo_pessoa_codigo_maiusculo check (codigo = upper(codigo))
+);
+
+comment on column tipo_pessoa.conta_presenca_em_aula is
+    'Verdadeiro para quem ocupa carteira em aula. Falso para quem apenas '
+    'circula no campus (funcionario, terceirizado, visitante).';
+
+create table if not exists pessoa (
+    id              integer generated always as identity primary key,
+    identificador   text not null unique,
+    nome            text not null,
+    tipo_codigo     text not null references tipo_pessoa (codigo),
+    email           text,
+    curso           text,
+    turma_id        text,
+    periodo         smallint,
+    setor           text,
+    cargo           text,
+    situacao        text not null default 'ATIVO',
+    origem          text not null default 'JACAD',
+    ativo           boolean not null default true,
+    sincronizado_em timestamptz,
+    observacao      text,
+    criado_em       timestamptz not null default now(),
+    atualizado_em   timestamptz not null default now(),
+
+    constraint pessoa_origem_valida check (origem in ('JACAD', 'CATRACA', 'MANUAL')),
+    constraint pessoa_periodo_plausivel check (periodo is null or periodo between 1 and 20)
+);
+
+comment on column pessoa.identificador is
+    'RA / matricula. E a chave do cruzamento: o cracha da catraca usa o mesmo.';
+comment on column pessoa.origem is
+    'De onde o registro veio. JACAD e reescrito a cada sync; MANUAL nao.';
+
+create index if not exists pessoa_por_tipo on pessoa (tipo_codigo) where ativo;
+create index if not exists pessoa_por_turma on pessoa (turma_id) where turma_id is not null;
+create index if not exists pessoa_por_nome on pessoa (lower(nome));
+
+-- ------------------------------------------------------------- acesso
+
+-- Senha em hash scrypt. Crie a primeira conta com `python criar_usuario.py`,
+-- nunca por INSERT.
 create table if not exists usuario (
     id            integer generated always as identity primary key,
     email         text not null unique,
@@ -110,9 +151,6 @@ create table if not exists usuario (
         check (papel in ('ADMIN', 'SECRETARIA', 'LEITURA')),
     constraint usuario_email_minusculo check (email = lower(email))
 );
-
-comment on table usuario is
-    'Contas de acesso ao cadastro. O painel de leitura nao exige login.';
 
 create index if not exists usuario_ativo on usuario (email) where ativo;
 
@@ -133,9 +171,46 @@ create table if not exists sala_auditoria (
 create index if not exists sala_auditoria_por_sala
     on sala_auditoria (sala_codigo, criado_em desc);
 
-comment on table sala_auditoria is 'Historico de alteracoes do cadastro.';
+-- --------------------------------------------------------- parametros
 
--- ------------------------------------------------------- gatilhos e view
+-- Fora daqui de proposito: DATABASE_URL, JWT_SECRET, REDIS_URL e JACAD_TOKEN.
+-- Os tres primeiros sao necessarios antes de existir conexao com o banco;
+-- o ultimo e segredo que nao deve ser legivel por quem abre o painel.
+create table if not exists parametro (
+    chave          text primary key,
+    valor          text,
+    tipo           text not null,
+    categoria      text not null,
+    rotulo         text not null,
+    descricao      text,
+    unidade        text,
+    minimo         numeric,
+    maximo         numeric,
+    ordem          smallint not null default 100,
+    atualizado_por text,
+    atualizado_em  timestamptz,
+    criado_em      timestamptz not null default now(),
+
+    constraint parametro_tipo_valido check (tipo in ('INTEIRO', 'BOOLEANO', 'TEXTO')),
+    constraint parametro_chave_maiuscula check (chave = upper(chave))
+);
+
+comment on column parametro.valor is
+    'Nulo = nao definido aqui; vale a variavel de ambiente ou o padrao.';
+
+create table if not exists parametro_auditoria (
+    id           bigint generated always as identity primary key,
+    chave        text not null,
+    valor_antes  text,
+    valor_depois text,
+    usuario_nome text,
+    criado_em    timestamptz not null default now()
+);
+
+create index if not exists parametro_auditoria_por_chave
+    on parametro_auditoria (chave, criado_em desc);
+
+-- ------------------------------------------------------ gatilhos e views
 
 create or replace function toca_atualizado_em()
 returns trigger
@@ -164,48 +239,109 @@ drop trigger if exists usuario_atualizado on usuario;
 create trigger usuario_atualizado before update on usuario
     for each row execute function toca_atualizado_em();
 
--- security_invoker: sem isso a view roda com os privilegios de quem a criou
--- e ignora o RLS de quem consulta, abrindo o que as tabelas fecham.
+drop trigger if exists tipo_pessoa_atualizado on tipo_pessoa;
+create trigger tipo_pessoa_atualizado before update on tipo_pessoa
+    for each row execute function toca_atualizado_em();
+
+drop trigger if exists pessoa_atualizada on pessoa;
+create trigger pessoa_atualizada before update on pessoa
+    for each row execute function toca_atualizado_em();
+
+-- security_invoker: sem isso a view roda com os privilegios de quem a criou e
+-- ignora o RLS de quem consulta, abrindo o que as tabelas fecham.
 create or replace view vw_sala_completa
 with (security_invoker = on) as
 select
-    s.id,
-    s.codigo,
-    s.codigo_planta,
-    s.codigo_ensalamento,
-    s.nome            as sala,
-    s.tipo,
-    s.capacidade,
-    s.rack_id,
-    s.ativa,
+    s.id, s.codigo, s.codigo_planta, s.codigo_ensalamento,
+    s.nome as sala, s.tipo, s.capacidade, s.rack_id, s.ativa,
     s.pos_x, s.pos_z, s.largura, s.profundidade,
-    p.codigo          as pavimento_codigo,
-    p.nome            as pavimento,
-    p.ordem           as pavimento_ordem,
+    p.codigo  as pavimento_codigo,
+    p.nome    as pavimento,
+    p.ordem   as pavimento_ordem,
     p.altura_y,
-    pr.codigo         as predio_codigo,
-    pr.nome           as predio
+    pr.codigo as predio_codigo,
+    pr.nome   as predio
 from sala s
 join pavimento p on p.id = s.pavimento_id
 join predio pr on pr.id = p.predio_id;
 
-comment on view vw_sala_completa is
-    'Sala com predio e andar resolvidos: a visao de cadastro completa.';
+create or replace view vw_pessoa_completa
+with (security_invoker = on) as
+select
+    p.id, p.identificador, p.nome, p.email, p.curso, p.turma_id, p.periodo,
+    p.setor, p.cargo, p.situacao, p.origem, p.ativo, p.sincronizado_em,
+    t.codigo as tipo,
+    t.nome   as tipo_nome,
+    t.plural as tipo_plural,
+    t.conta_presenca_em_aula,
+    t.cor    as tipo_cor,
+    t.ordem  as tipo_ordem
+from pessoa p
+join tipo_pessoa t on t.codigo = p.tipo_codigo;
 
 -- O backend acessa por conexao direta, que nao passa por RLS. Habilitar sem
--- politicas bloqueia leitura anonima via APIs REST geradas (Supabase, PostgREST).
-alter table predio         enable row level security;
-alter table pavimento      enable row level security;
-alter table sala           enable row level security;
-alter table usuario        enable row level security;
-alter table sala_auditoria enable row level security;
+-- politicas bloqueia leitura anonima pelas APIs REST geradas.
+alter table predio              enable row level security;
+alter table pavimento           enable row level security;
+alter table sala                enable row level security;
+alter table tipo_pessoa         enable row level security;
+alter table pessoa              enable row level security;
+alter table usuario             enable row level security;
+alter table sala_auditoria      enable row level security;
+alter table parametro           enable row level security;
+alter table parametro_auditoria enable row level security;
 
--- ------------------------------------------------------------ carga inicial
--- Idempotente: rodar de novo nao duplica nem sobrescreve edicoes ja feitas.
+-- ---------------------------------------------------------- carga inicial
 
 insert into predio (codigo, nome)
 values ('SEDE', 'Campus Sede')
 on conflict (codigo) do nothing;
+
+insert into tipo_pessoa (codigo, nome, plural, conta_presenca_em_aula, cor, ordem)
+values
+    ('ALUNO',        'Aluno',        'Alunos',        true,  '#00C9B7', 10),
+    ('PROFESSOR',    'Professor',    'Professores',   false, '#3B82F6', 20),
+    ('FUNCIONARIO',  'Funcionario',  'Funcionarios',  false, '#F59E0B', 30),
+    ('TERCEIRIZADO', 'Terceirizado', 'Terceirizados', false, '#8b949e', 40),
+    ('VISITANTE',    'Visitante',    'Visitantes',    false, '#A855F7', 50)
+on conflict (codigo) do nothing;
+
+insert into parametro (chave, tipo, categoria, rotulo, descricao, unidade,
+                       minimo, maximo, ordem) values
+    ('TOLERANCIA_ATRASO_MIN', 'INTEIRO', 'PRESENCA', 'Tolerancia de atraso',
+     'Entrada ate este tempo apos o inicio ainda conta como PRESENTE.',
+     'minutos', 0, 120, 10),
+    ('JANELA_CHEGADA_ANTECIPADA_MIN', 'INTEIRO', 'PRESENCA', 'Janela de chegada',
+     'Quanto antes do inicio a aula abre e as carteiras ficam reservadas.',
+     'minutos', 0, 240, 20),
+    ('LIMIAR_BAIXA_PRESENCA', 'INTEIRO', 'PRESENCA', 'Alerta de baixa presenca',
+     'Abaixo desta taxa a sala entra em alerta para a diretoria.',
+     '%', 0, 100, 30),
+    ('CATRACA_TIMEOUT_S', 'INTEIRO', 'PRESENCA', 'Catraca sem sinal',
+     'Tempo sem passagem para considerar o equipamento fora do ar.',
+     'segundos', 60, 7200, 40),
+    ('JACAD_BASE_URL', 'TEXTO', 'INTEGRACAO', 'Endereco do JACAD',
+     'URL base da API do ERP. Vazio mantem o modo simulado.',
+     null, null, null, 10),
+    ('JACAD_MODO_MOCK', 'BOOLEANO', 'INTEGRACAO', 'Usar dados simulados do JACAD',
+     'Ligado usa o conjunto sintetico. Desligue com o ERP acessivel.',
+     null, null, null, 20),
+    ('JACAD_SYNC_INTERVAL_S', 'INTEIRO', 'INTEGRACAO', 'Intervalo de sincronizacao',
+     'De quanto em quanto tempo o ERP e relido.',
+     'segundos', 60, 86400, 30),
+    ('SIMULADOR_ATIVO', 'BOOLEANO', 'INTEGRACAO', 'Simulador de catracas',
+     'Gera passagens a partir da grade. Desligue em producao.',
+     null, null, null, 40),
+    ('TIMEZONE', 'TEXTO', 'SISTEMA', 'Fuso do campus',
+     'A grade e hora de parede local. Exige reinicio para valer.',
+     null, null, null, 10),
+    ('TICK_DASHBOARD_S', 'INTEIRO', 'SISTEMA', 'Atualizacao do painel',
+     'Periodo do recalculo dos indicadores enviado aos paineis.',
+     'segundos', 1, 300, 20),
+    ('MAX_EVENTOS_FEED', 'INTEIRO', 'SISTEMA', 'Passagens no feed',
+     'Quantas passagens recentes o painel guarda.',
+     'eventos', 10, 500, 30)
+on conflict (chave) do nothing;
 
 
 insert into pavimento (predio_id, codigo, nome, ordem, altura_y, descricao)
@@ -294,9 +430,12 @@ join predio pr on pr.id = p.predio_id and pr.codigo = 'SEDE',
 where p.codigo = v.pav
 on conflict (codigo) do nothing;
 
--- Conferencia: deve devolver 1 predio, 4 pavimentos, 63 salas, 2742 lugares.
+-- Conferencia: 1 predio, 4 pavimentos, 63 salas, 2742 lugares, 5 tipos,
+-- 11 parametros no catalogo.
 select
     (select count(*) from predio)      as predios,
     (select count(*) from pavimento)   as pavimentos,
     (select count(*) from sala)        as salas,
-    (select sum(capacidade) from sala) as lugares;
+    (select sum(capacidade) from sala) as lugares,
+    (select count(*) from tipo_pessoa) as tipos_pessoa,
+    (select count(*) from parametro)   as parametros;
