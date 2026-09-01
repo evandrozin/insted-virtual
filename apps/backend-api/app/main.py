@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 import asyncio
-from contextlib import asynccontextmanager
+import traceback
+from contextlib import asynccontextmanager, contextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -21,6 +22,24 @@ from app.services.store import obter_store
 VERSAO = "2.0.0"
 
 _tarefas: list[asyncio.Task] = []
+
+# Falhas da partida ficam registradas aqui e aparecem no /health, em vez de
+# derrubar o processo. Na Vercel uma excecao no lifespan vira
+# FUNCTION_INVOCATION_FAILED: 500 sem corpo, sem dizer o que quebrou, em todas
+# as rotas - inclusive no /health, justo quem existe para responder isso. Um
+# painel degradado que aponta o problema vale mais que um 500 mudo.
+_falhas_boot: list[dict] = []
+
+
+@contextmanager
+def _etapa(nome: str):
+    """Isola uma etapa da partida: se cair, anota e deixa o resto subir."""
+    try:
+        yield
+    except Exception as erro:
+        _falhas_boot.append({"etapa": nome, "erro": f"{type(erro).__name__}: {erro}"})
+        print(f"[boot] FALHA em {nome}: {type(erro).__name__}: {erro}")
+        traceback.print_exc()
 
 
 async def _loop_reconciliacao() -> None:
@@ -63,37 +82,51 @@ async def _loop_sync_jacad() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     store = obter_store()
-    await store.iniciar()
-    print(f"[boot] estado compartilhado: {store.nome}")
 
-    await clock.inicializar(store)
-    print(f"[boot] relogio: {clock.descricao()}")
+    with _etapa("estado compartilhado"):
+        await store.iniciar()
+        print(f"[boot] estado compartilhado: {store.nome}")
 
-    carregados = await parametros.recarregar()
-    print(f"[boot] parametros vindos do banco: {carregados}")
+    with _etapa("relogio"):
+        await clock.inicializar(store)
+        print(f"[boot] relogio: {clock.descricao()}")
 
-    await _carregar_topologia()
+    with _etapa("parametros"):
+        carregados = await parametros.recarregar()
+        print(f"[boot] parametros vindos do banco: {carregados}")
 
-    resumo = motor.sincronizar_jacad()
-    print(f"[boot] JACAD carregado: {resumo}")
+    with _etapa("topologia"):
+        await _carregar_topologia()
+
+    with _etapa("JACAD"):
+        resumo = motor.sincronizar_jacad()
+        print(f"[boot] JACAD carregado: {resumo}")
 
     # Entrega ao painel local tudo que circula no canal (proprio ou de outra
     # instancia); e o que mantem a projecao das carteiras alinhada.
-    await iniciar_relay()
-    await _assinar_deltas()
+    with _etapa("relay de tempo real"):
+        await iniciar_relay()
+        await _assinar_deltas()
 
-    recuperadas = await motor.reidratar()
-    if recuperadas:
-        print(f"[boot] reidratou {recuperadas} presencas do estado compartilhado")
+    with _etapa("reidratacao"):
+        recuperadas = await motor.reidratar()
+        if recuperadas:
+            print(f"[boot] reidratou {recuperadas} presencas do estado compartilhado")
 
-    await motor.reconciliar()
+    with _etapa("reconciliacao inicial"):
+        await motor.reconciliar()
 
     if settings.SIMULADOR_ATIVO:
-        from app.simulator.catraca_simulator import simulador
+        with _etapa("simulador"):
+            from app.simulator.catraca_simulator import simulador
 
-        semeados = await simulador.semear_campus(clock.agora())
-        print(f"[boot] simulador semeou {semeados} passagens")
-        _tarefas.append(asyncio.create_task(simulador.rodar()))
+            semeados = await simulador.semear_campus(clock.agora())
+            print(f"[boot] simulador semeou {semeados} passagens")
+            _tarefas.append(asyncio.create_task(simulador.rodar()))
+
+    if _falhas_boot:
+        print(f"[boot] subiu com {len(_falhas_boot)} etapa(s) com falha; "
+              f"veja /health")
 
     if settings.LOOP_INTERNO:
         _tarefas.append(asyncio.create_task(_loop_reconciliacao()))
@@ -106,7 +139,8 @@ async def lifespan(app: FastAPI):
     for tarefa in _tarefas:
         tarefa.cancel()
     await asyncio.gather(*_tarefas, return_exceptions=True)
-    await store.encerrar()
+    with _etapa("encerramento"):
+        await store.encerrar()
 
 
 async def _carregar_topologia() -> None:
@@ -219,7 +253,10 @@ async def health() -> dict:
 
     commit = os.getenv("VERCEL_GIT_COMMIT_SHA", "")
     return {
-        "status": "ok",
+        # "degradado" quando alguma etapa da partida caiu: o app serve, mas
+        # com menos do que deveria. Dizer "ok" ai esconderia justamente o que
+        # este endpoint existe para mostrar.
+        "status": "degradado" if _falhas_boot else "ok",
         "servico": settings.PROJECT_NAME,
         "versao": VERSAO,
         "commit": commit[:7] if commit else "local",
@@ -229,5 +266,6 @@ async def health() -> dict:
         "estado": obter_store().nome,
         "banco": bool(settings.DATABASE_URL),
         "simulador": parametros.simulador_ativo(),
+        "falhas_boot": _falhas_boot,
         "paineis_conectados": manager.total,
     }
