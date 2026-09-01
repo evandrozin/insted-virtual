@@ -2,12 +2,12 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
     "app/main.py": {
-      "maxDuration": 800,
+      "maxDuration": 300,
       "memory": 2048
     }
   },
   "crons": [
-    { "path": "/api/v1/cron/reconciliar", "schedule": "* * * * *" },
-    { "path": "/api/v1/cron/sync-jacad", "schedule": "0 * * * *" }
+    { "path": "/api/v1/cron/reconciliar", "schedule": "0 3 * * *" },
+    { "path": "/api/v1/cron/sync-jacad", "schedule": "0 4 * * *" }
   ]
 }

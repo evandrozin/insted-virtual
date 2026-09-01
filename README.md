@@ -419,12 +419,17 @@ Três pontos de atenção:
 - **`REDIS_URL` é obrigatório na Vercel.** Sem ele cada instância fica com um
   estado próprio: os painéis mostrariam números diferentes e uma passagem lida
   numa instância não chegaria à outra.
-- **A conexão cai no `maxDuration`** (Hobby 300 s; Pro 800 s, o valor do
-  `vercel.json`). O painel reconecta sozinho com *backoff* e recebe o snapshot
-  inteiro no handshake, então o usuário não percebe.
-- **O cron de 1 em 1 minuto exige plano Pro.** No Hobby o agendamento é diário,
-  e a reconciliação — que abre e encerra aulas pela grade — ficaria parada entre
-  as execuções. Nesse caso prefira a alternativa abaixo.
+- **`maxDuration` e cron do `vercel.json` estão nos limites do Hobby**: 300 s e
+  agendamento diário. Valores acima disso fazem o deploy **falhar na validação
+  da configuração**, antes de virar build — e o erro não aparece na lista de
+  deployments, o que torna a causa difícil de achar. No Pro, suba para
+  `maxDuration: 800` e `schedule: "* * * * *"`.
+- **A conexão cai no `maxDuration`.** O painel reconecta sozinho com *backoff*
+  e recebe o snapshot inteiro no handshake, então o usuário não percebe.
+- **Com cron diário a reconciliação fica parada** entre as execuções: as aulas
+  não abrem nem encerram sozinhas ao longo do dia. Há reconciliação a cada boot
+  de instância, o que preenche parte da lacuna, mas para acompanhamento real
+  prefira a alternativa abaixo.
 
 ### Alternativa com processo contínuo (recomendada no plano Hobby)
 
