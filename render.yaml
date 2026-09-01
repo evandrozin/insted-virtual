@@ -12,7 +12,7 @@ services:
   - type: web
     name: insted-backend
     runtime: python
-    region: oregon
+    region: virginia
     plan: free
     rootDir: apps/backend-api
     buildCommand: pip install -r requirements.txt
@@ -20,6 +20,12 @@ services:
     healthCheckPath: /health
 
     envVars:
+      # Fixada de proposito. Boa parte do tempo perdido na Vercel foi por
+      # diferenca silenciosa de ambiente: o que roda aqui tem que ser o que
+      # roda la.
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+
       # A grade e hora de parede local; sem isso o servidor procuraria as
       # aulas no fuso dele.
       - key: TIMEZONE
@@ -34,6 +40,8 @@ services:
         value: "true"
 
       # Preenchidos no painel do Render (Environment), nunca no repositorio.
+      # CORS_ORIGINS precisa listar o dominio do painel na Vercel, senao o
+      # navegador barra as chamadas mesmo com a API de pe.
       - key: DATABASE_URL
         sync: false
       - key: JWT_SECRET
