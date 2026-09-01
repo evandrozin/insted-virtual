@@ -384,10 +384,17 @@ estar no ar.
 | Campo | Valor |
 |---|---|
 | Root Directory | `apps/backend-api` |
-| Framework | FastAPI (detectado automaticamente) |
+| Framework | Other |
 
-A Vercel encontra sozinha a instância `app` em `app/main.py`; o `vercel.json`
-de lá só ajusta `maxDuration` e os crons. Variáveis:
+O entrypoint é `api/index.py`, que apenas reexporta a instância `app`. Não
+remova essa pasta: o runtime Python da Vercel só promove a função os arquivos
+dentro de `api/`, e a chave `functions` do `vercel.json` configura arquivos que
+já são função — ela não transforma `app/main.py` em entrypoint. O rewrite manda
+todos os caminhos para lá e o roteamento segue sendo do FastAPI.
+
+`maxDuration` e os crons estão nos limites do plano Hobby (300 s, agendamento
+diário); valores acima disso fazem o deploy falhar na validação, antes do build,
+sem aparecer na lista de deployments. Variáveis:
 
 ```
 TIMEZONE        = America/Campo_Grande
