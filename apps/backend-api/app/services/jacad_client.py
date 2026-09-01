@@ -16,7 +16,7 @@ from typing import List, Protocol, Set
 from app.core import parametros
 from app.core.config import settings
 from app.data.campus_seed import SALAS_POR_PAVIMENTO
-from app.models.academico import AlunoModel, AulaModel, TurmaModel
+from app.models.academico import AlunoModel, AulaModel, ProfessorModel, TurmaModel
 from app.models.enums import Pavimento
 
 # ---------------------------------------------------------------------------
@@ -26,6 +26,7 @@ from app.models.enums import Pavimento
 
 class JacadClient(Protocol):
     def listar_alunos(self) -> List[AlunoModel]: ...
+    def listar_professores(self) -> List[ProfessorModel]: ...
     def listar_turmas(self) -> List[TurmaModel]: ...
     def listar_grade_horaria(self) -> List[AulaModel]: ...
 
@@ -64,12 +65,36 @@ SOBRENOMES = [
     "Pereira", "Lima", "Gomes", "Costa", "Ribeiro", "Martins", "Carvalho",
     "Almeida", "Lopes", "Soares", "Fernandes", "Vieira", "Barbosa",
 ]
+# (nome, area). A matricula e derivada da posicao, entao e estavel entre
+# execucoes - o mesmo docente mantem o identificador que a catraca leria.
 PROFESSORES = [
-    "Prof. Adriana Mendes", "Prof. Carlos Tavares", "Prof. Denise Rocha",
-    "Prof. Eduardo Prado", "Prof. Fernanda Luz", "Prof. Gilberto Nunes",
-    "Prof. Helena Vasques", "Prof. Ivan Portela", "Prof. Juliana Sa",
-    "Prof. Leonardo Brito", "Prof. Marcia Antunes", "Prof. Otavio Ramos",
+    ("Adriana Mendes",  "Administracao"),
+    ("Carlos Tavares",  "Direito"),
+    ("Denise Rocha",    "Enfermagem"),
+    ("Eduardo Prado",   "Engenharia de Software"),
+    ("Fernanda Luz",    "Pedagogia"),
+    ("Gilberto Nunes",  "Ciencias Contabeis"),
+    ("Helena Vasques",  "Psicologia"),
+    ("Ivan Portela",    "Sistemas de Informacao"),
+    ("Juliana Sa",      "Direito"),
+    ("Leonardo Brito",  "Engenharia de Software"),
+    ("Marcia Antunes",  "Pedagogia"),
+    ("Otavio Ramos",    "Administracao"),
 ]
+
+# Prefixo 3 para nao colidir com o RA de aluno, que comeca em 2026.
+def _matricula_docente(indice: int) -> str:
+    return f"3{indice + 1:07d}"
+
+# Corpo discente ativo em 2026.2, informado pela Secretaria. Trocar este numero
+# e o suficiente para o conjunto sintetico refletir o semestre corrente - as
+# turmas se ajustam sozinhas. Quando o ERP real entrar, nada disso e usado.
+TOTAL_ALUNOS = 1732
+PERIODOS_POR_CURSO = 6
+# Piso por turma: mais periodos e melhor que turmas gigantes, que nao caberiam
+# nas salas reais (30 a 40 lugares) e encheriam a maquete de sobrelotacao
+# inventada.
+MENOR_TURMA = 20
 
 # Blocos de horario praticados no campus (matutino, vespertino e noturno).
 BLOCOS = [
@@ -105,6 +130,16 @@ class JacadMockClient:
         self._rng = random.Random(seed)
         self._turmas: List[TurmaModel] = []
         self._alunos: List[AlunoModel] = []
+        self._professores: List[ProfessorModel] = [
+            ProfessorModel(
+                matricula=_matricula_docente(i),
+                nome=f"Prof. {nome}",
+                email=f"{nome.split()[0].lower()}.{nome.split()[-1].lower()}@insted.edu.br",
+                setor=area,
+                cargo="Docente",
+            )
+            for i, (nome, area) in enumerate(PROFESSORES)
+        ]
         self._aulas: List[AulaModel] = []
         self._construir()
 
@@ -113,28 +148,64 @@ class JacadMockClient:
         rng = self._rng
         ra_seq = 20260000
 
-        for sigla, curso, _disciplinas in CURSOS:
-            for periodo in range(1, 5):
-                turma_id = f"{sigla}-{periodo}"
-                qtd = rng.randint(28, 44)
-                alunos_ra: List[str] = []
+        planejadas = [
+            (sigla, curso, periodo)
+            for sigla, curso, _disciplinas in CURSOS
+            for periodo in range(1, PERIODOS_POR_CURSO + 1)
+        ]
+        tamanhos = self._repartir(TOTAL_ALUNOS, len(planejadas))
 
-                for _ in range(qtd):
-                    ra_seq += 1
-                    ra = str(ra_seq)
-                    nome = f"{rng.choice(NOMES)} {rng.choice(SOBRENOMES)} {rng.choice(SOBRENOMES)}"
-                    self._alunos.append(
-                        AlunoModel(ra=ra, nome=nome, curso=curso,
-                                   turma_id=turma_id, periodo=periodo)
-                    )
-                    alunos_ra.append(ra)
+        for (sigla, curso, periodo), qtd in zip(planejadas, tamanhos):
+            turma_id = f"{sigla}-{periodo}"
+            alunos_ra: List[str] = []
 
-                self._turmas.append(
-                    TurmaModel(id=turma_id, nome=f"{curso} - {periodo}o periodo",
-                               curso=curso, periodo=periodo, alunos_ra=alunos_ra)
+            for _ in range(qtd):
+                ra_seq += 1
+                ra = str(ra_seq)
+                nome = f"{rng.choice(NOMES)} {rng.choice(SOBRENOMES)} {rng.choice(SOBRENOMES)}"
+                self._alunos.append(
+                    AlunoModel(ra=ra, nome=nome, curso=curso,
+                               turma_id=turma_id, periodo=periodo)
                 )
+                alunos_ra.append(ra)
+
+            self._turmas.append(
+                TurmaModel(
+                    id=turma_id,
+                    nome=f"{curso} - {periodo}o periodo",
+                    nome_reduzido=f"{sigla} {periodo}P",
+                    curso=curso,
+                    periodo=periodo,
+                    alunos_ra=alunos_ra,
+                )
+            )
 
         self._montar_grade()
+
+    def _repartir(self, total: int, turmas: int) -> List[int]:
+        """Reparte `total` alunos entre `turmas`, com variacao e soma exata.
+
+        As turmas variam de tamanho como variam na pratica, mas a soma precisa
+        fechar no total: e o numero que a diretoria confere contra o ERP, e uma
+        aproximacao "mais ou menos 30" desmoralizaria a tela.
+        """
+        rng = self._rng
+        base = [rng.randint(28, 44) for _ in range(turmas)]
+        fator = total / sum(base)
+        tamanhos = [max(MENOR_TURMA, round(b * fator)) for b in base]
+
+        # A escala arredonda para cima e para baixo; a sobra e distribuida de
+        # uma em uma, sem deixar turma abaixo do minimo.
+        resto = total - sum(tamanhos)
+        i = 0
+        while resto:
+            passo = 1 if resto > 0 else -1
+            alvo = i % turmas
+            if tamanhos[alvo] + passo >= MENOR_TURMA:
+                tamanhos[alvo] += passo
+                resto -= passo
+            i += 1
+        return tamanhos
 
     def _montar_grade(self) -> None:
         """Aloca cada turma em salas/blocos sem colisao de sala no mesmo horario."""
@@ -168,13 +239,19 @@ class JacadMockClient:
                         d for s, _c, d in CURSOS if turma.id.startswith(s + "-")
                     )
                     aula_seq += 1
+                    # A ordem dos sorteios importa: o dataset e deterministico
+                    # por semente, e inverter disciplina e docente aqui muda a
+                    # grade inteira.
+                    disciplina = rng.choice(disciplinas)
+                    docente = rng.choice(self._professores)
 
                     self._aulas.append(
                         AulaModel(
                             id=f"AULA_{aula_seq:05d}",
                             turma_id=turma.id,
-                            disciplina=rng.choice(disciplinas),
-                            professor=rng.choice(PROFESSORES),
+                            disciplina=disciplina,
+                            professor=docente.nome,
+                            professor_matricula=docente.matricula,
                             sala_id=sala_id,
                             dia_semana=dia,
                             hora_inicio=inicio,
@@ -185,6 +262,9 @@ class JacadMockClient:
     # -- contrato -----------------------------------------------------------
     def listar_alunos(self) -> List[AlunoModel]:
         return list(self._alunos)
+
+    def listar_professores(self) -> List[ProfessorModel]:
+        return list(self._professores)
 
     def listar_turmas(self) -> List[TurmaModel]:
         return list(self._turmas)
@@ -230,6 +310,26 @@ class JacadRestClient:
             for item in self._get("/academico/alunos?situacao=ATIVO")
         ]
 
+    def listar_professores(self) -> List[ProfessorModel]:
+        """Corpo docente ativo.
+
+        `matricula` e o campo que precisa bater com o cracha da catraca. Se o
+        tenant expuser outro nome para ele, e aqui que se ajusta.
+        """
+        return [
+            ProfessorModel(
+                matricula=str(item.get("matricula") or item.get("registroFuncional")),
+                nome=item["nome"],
+                email=item.get("email"),
+                setor=item.get("departamento", {}).get("nome")
+                if isinstance(item.get("departamento"), dict)
+                else item.get("departamento"),
+                cargo=item.get("cargo", "Docente"),
+                situacao=item.get("situacao", "ATIVO"),
+            )
+            for item in self._get("/academico/professores?situacao=ATIVO")
+        ]
+
     def listar_turmas(self) -> List[TurmaModel]:
         return [
             TurmaModel(
@@ -249,6 +349,10 @@ class JacadRestClient:
                 turma_id=str(item["turmaCodigo"]),
                 disciplina=item["disciplina"],
                 professor=item.get("professor", "A definir"),
+                professor_matricula=(
+                    str(item["professorMatricula"])
+                    if item.get("professorMatricula") else None
+                ),
                 sala_id=str(item["salaCodigo"]),
                 dia_semana=int(item["diaSemana"]),
                 hora_inicio=time.fromisoformat(item["horaInicio"]),

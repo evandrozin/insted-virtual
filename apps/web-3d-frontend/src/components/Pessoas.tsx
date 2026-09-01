@@ -15,6 +15,17 @@ const POR_PAGINA = 100;
  * a coluna "no campus" e o conjunto de passagens registradas hoje batido
  * contra o cadastro.
  */
+/** Rotulo em portugues para o codigo do tipo, no singular ou plural. */
+function rotuloTipo(codigo: string, quantidade: number): string {
+  const nomes: Record<string, [string, string]> = {
+    ALUNO: ['aluno', 'alunos'],
+    PROFESSOR: ['professor', 'professores'],
+    FUNCIONARIO: ['funcionário', 'funcionários'],
+  };
+  const par = nomes[codigo] ?? [codigo.toLowerCase(), codigo.toLowerCase()];
+  return quantidade === 1 ? par[0] : par[1];
+}
+
 export const Pessoas: React.FC<{ aoFechar: () => void }> = ({ aoFechar }) => {
   const [resumo, setResumo] = useState<ResumoPessoas | null>(null);
   const [lista, setLista] = useState<Pessoa[]>([]);
@@ -120,9 +131,13 @@ export const Pessoas: React.FC<{ aoFechar: () => void }> = ({ aoFechar }) => {
                     comSessao(
                       async () => {
                         const r = await sincronizarPessoas(token!);
+                        const porTipo = Object.entries(r.por_tipo ?? {})
+                          .map(([tipo, d]) =>
+                            `${d.gravados} ${rotuloTipo(tipo, d.gravados)}` +
+                            (d.desativados ? ` (${d.desativados} desativados)` : ''))
+                          .join(', ');
                         setAviso(
-                          `JACAD: ${r.recebidos} recebidos, ${r.gravados} no cadastro` +
-                          (r.desativados ? `, ${r.desativados} desativados` : '') + '.',
+                          `JACAD: ${porTipo || `${r.gravados} no cadastro`}.`,
                         );
                       },
                       'Sincronizado com o JACAD.',
@@ -240,7 +255,10 @@ export const Pessoas: React.FC<{ aoFechar: () => void }> = ({ aoFechar }) => {
                         {p.tipo_nome}
                       </span>
                     </td>
-                    <td className="muted">{p.turma_id ?? p.setor ?? '—'}</td>
+                    <td className="muted" title={p.turma_id ?? undefined}>
+                      {/* Nome curto quando o ERP informa; o codigo fica na dica. */}
+                      {p.turma_nome ?? p.turma_id ?? p.setor ?? '—'}
+                    </td>
                     <td className="muted mono">{p.origem}</td>
                     <td>
                       {p.no_campus

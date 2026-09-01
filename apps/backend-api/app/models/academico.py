@@ -17,9 +17,28 @@ class AlunoModel(BaseModel):
     foto_url: Optional[str] = None
 
 
+class ProfessorModel(BaseModel):
+    """Docente vindo do ERP.
+
+    `matricula` e o mesmo identificador que o cracha apresenta na catraca - e
+    o que permite conferir quem esta no campus contra a base do JACAD. Sem ele
+    o professor existe so como nome na grade, e nao da para cruzar nada.
+    """
+
+    matricula: str = Field(..., description="Matricula funcional (chave do cruzamento)")
+    nome: str
+    email: Optional[str] = None
+    setor: Optional[str] = Field(None, description="Departamento ou area")
+    cargo: Optional[str] = None
+    situacao: str = "ATIVO"
+
+
 class TurmaModel(BaseModel):
     id: str
     nome: str
+    # Nome curto da turma no ERP ("ADM 3P"). E o rotulo que cabe numa coluna de
+    # listagem; o nome completo nao cabe.
+    nome_reduzido: Optional[str] = None
     curso: str
     periodo: int
     alunos_ra: List[str] = Field(default_factory=list)
@@ -32,6 +51,9 @@ class AulaModel(BaseModel):
     turma_id: str
     disciplina: str
     professor: str
+    # Nulo quando o ERP nao informa a matricula do docente: a aula continua
+    # valendo, mas esse professor nao entra no cruzamento com a catraca.
+    professor_matricula: Optional[str] = None
     sala_id: str
     dia_semana: int = Field(..., ge=0, le=6, description="0=segunda ... 6=domingo")
     hora_inicio: time

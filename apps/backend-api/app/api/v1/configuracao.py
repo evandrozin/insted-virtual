@@ -245,14 +245,11 @@ async def desativar(
 
 @router.post("/pessoas/sincronizar")
 async def sincronizar(usuario: dict = Depends(requer_edicao)) -> dict:
-    """Traz do JACAD para o cadastro local. Nao toca em quem foi criado a mao."""
+    """Traz alunos e professores do JACAD. Nao toca em quem foi criado a mao."""
     _exige_banco()
-    from app.services.jacad_client import obter_client
+    from app.services.cadastro_pessoas import espelhar
 
-    alunos = [a.model_dump() for a in obter_client().listar_alunos()]
-    resumo = await pessoas.sincronizar_do_jacad(alunos)
-    resumo["sincronizado_em"] = clock.agora().isoformat()
-    return resumo
+    return await espelhar()
 
 
 # ---------------------------------------------------------------------------

@@ -60,5 +60,11 @@ async def reconciliar(authorization: str | None = Header(default=None)) -> dict:
 async def sync_jacad(authorization: str | None = Header(default=None)) -> dict:
     _autorizar(authorization)
     resumo = motor.sincronizar_jacad()
+
+    # Alem da memoria, atualiza a base local de pessoas: e contra ela que a
+    # conferencia com a catraca e feita, entao ela nao pode envelhecer.
+    from app.services.cadastro_pessoas import espelhar
+
+    resumo["cadastro"] = await espelhar()
     await motor.reconciliar()
     return resumo

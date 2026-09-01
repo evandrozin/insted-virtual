@@ -72,6 +72,9 @@ async def _loop_sync_jacad() -> None:
         await asyncio.sleep(parametros.jacad_sync_interval_s())
         try:
             resumo = motor.sincronizar_jacad()
+            from app.services.cadastro_pessoas import espelhar
+
+            resumo["cadastro"] = await espelhar()
             print(f"[jacad] resync: {resumo}")
         except asyncio.CancelledError:
             raise
@@ -101,6 +104,17 @@ async def lifespan(app: FastAPI):
     with _etapa("JACAD"):
         resumo = motor.sincronizar_jacad()
         print(f"[boot] JACAD carregado: {resumo}")
+
+    # Etapa propria: o espelho do cadastro depende do banco, e uma falha nele
+    # nao pode impedir o campus de aparecer na tela.
+    with _etapa("espelho de pessoas"):
+        from app.services.cadastro_pessoas import espelhar
+
+        espelho = await espelhar()
+        if espelho.get("aplicado"):
+            print(f"[boot] pessoas espelhadas: {espelho['por_tipo']}")
+        else:
+            print(f"[boot] pessoas nao espelhadas: {espelho.get('motivo')}")
 
     # Entrega ao painel local tudo que circula no canal (proprio ou de outra
     # instancia); e o que mantem a projecao das carteiras alinhada.

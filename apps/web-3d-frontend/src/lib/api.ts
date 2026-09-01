@@ -148,8 +148,13 @@ export const desativarPessoa = (identificador: string, token: string) =>
   );
 
 export const sincronizarPessoas = (token: string) =>
-  enviar<{ recebidos: number; gravados: number; desativados: number;
-           sincronizado_em: string }>(
+  enviar<{
+    recebidos: number; gravados: number; desativados: number;
+    // Quebra por tipo: alunos e professores sao sincronizados juntos, mas
+    // desativados separadamente, entao o total sozinho esconde o que mudou.
+    por_tipo: Record<string, { recebidos: number; gravados: number; desativados: number }>;
+    sincronizado_em: string;
+  }>(
     'POST', '/pessoas/sincronizar', undefined, token,
   );
 

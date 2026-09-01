@@ -123,6 +123,10 @@ create table if not exists pessoa (
     constraint pessoa_periodo_plausivel check (periodo is null or periodo between 1 and 20)
 );
 
+-- Nome curto da turma no ERP ("ADM 3P"). Fica junto da pessoa, e nao so o
+-- codigo, porque a listagem precisa de um rotulo legivel sem consultar turma.
+alter table pessoa add column if not exists turma_nome text;
+
 comment on column pessoa.identificador is
     'RA / matricula. E a chave do cruzamento: o cracha da catraca usa o mesmo.';
 comment on column pessoa.origem is
@@ -275,7 +279,11 @@ select
     t.plural as tipo_plural,
     t.conta_presenca_em_aula,
     t.cor    as tipo_cor,
-    t.ordem  as tipo_ordem
+    t.ordem  as tipo_ordem,
+    -- No fim de proposito: `create or replace view` so aceita colunas novas no
+    -- final. Inserir no meio exigiria derrubar a view, e este arquivo precisa
+    -- rodar tanto em banco novo quanto no que ja esta em producao.
+    p.turma_nome
 from pessoa p
 join tipo_pessoa t on t.codigo = p.tipo_codigo;
 

@@ -178,69 +178,109 @@ async def definir_situacao(identificador: str, ativo: bool) -> Optional[dict]:
 # Sincronizacao com o JACAD
 # ---------------------------------------------------------------------------
 
-async def sincronizar_do_jacad(alunos: List[dict]) -> Dict[str, int]:
+async def sincronizar_do_jacad(por_tipo: Dict[str, List[dict]]) -> Dict[str, Any]:
     """Reescreve as pessoas de origem JACAD a partir do ERP.
 
-    Quem foi cadastrado a mao (origem MANUAL) fica intocado: o porteiro que a
-    Secretaria criou nao pode desaparecer porque o ERP nao o conhece.
+    `por_tipo` mapeia o codigo do tipo (ALUNO, PROFESSOR) para os registros ja
+    normalizados daquele tipo. Cada registro traz identificador, nome e o que
+    fizer sentido para ele - curso/turma/periodo para aluno, setor/cargo para
+    docente.
+
+    Duas regras que valem a pena declarar:
+
+    * Quem foi cadastrado a mao (origem MANUAL) fica intocado. O porteiro que a
+      Secretaria criou nao pode desaparecer porque o ERP nao o conhece.
+    * A desativacao e feita **por tipo**. Varrer todos os JACAD de uma vez faria
+      uma sincronizacao so de alunos desativar o corpo docente inteiro.
     """
-    if not alunos:
-        return {"recebidos": 0, "gravados": 0, "desativados": 0}
+    tipos = {t: lista for t, lista in por_tipo.items() if lista}
+    if not tipos:
+        return {"recebidos": 0, "gravados": 0, "desativados": 0, "por_tipo": {}}
+
+    detalhe: Dict[str, Dict[str, int]] = {}
 
     conexao = await abrir()
     try:
         async with conexao.transaction():
-            registros = [
-                (
-                    a["ra"], a["nome"], "ALUNO", a.get("email"), a.get("curso"),
-                    a.get("turma_id"), a.get("periodo"),
-                    a.get("situacao", "ATIVO"),
+            for tipo, pessoas in tipos.items():
+                registros = [
+                    (
+                        r["identificador"], r["nome"], tipo, r.get("email"),
+                        r.get("curso"), r.get("turma_id"), r.get("turma_nome"),
+                        r.get("periodo"), r.get("setor"), r.get("cargo"),
+                        r.get("situacao", "ATIVO"),
+                    )
+                    for r in pessoas
+                ]
+                await conexao.executemany(
+                    """
+                    insert into pessoa (identificador, nome, tipo_codigo, email,
+                                        curso, turma_id, turma_nome, periodo,
+                                        setor, cargo, situacao, origem, ativo,
+                                        sincronizado_em)
+                    values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'JACAD',true,now())
+                    on conflict (identificador) do update set
+                        nome = excluded.nome,
+                        tipo_codigo = excluded.tipo_codigo,
+                        email = excluded.email,
+                        curso = excluded.curso,
+                        turma_id = excluded.turma_id,
+                        turma_nome = excluded.turma_nome,
+                        periodo = excluded.periodo,
+                        setor = excluded.setor,
+                        cargo = excluded.cargo,
+                        situacao = excluded.situacao,
+                        ativo = true,
+                        sincronizado_em = now(),
+                        atualizado_em = now()
+                    where pessoa.origem = 'JACAD'
+                    """,
+                    registros,
                 )
-                for a in alunos
-            ]
-            await conexao.executemany(
-                """
-                insert into pessoa (identificador, nome, tipo_codigo, email,
-                                    curso, turma_id, periodo, situacao,
-                                    origem, ativo, sincronizado_em)
-                values ($1,$2,$3,$4,$5,$6,$7,$8,'JACAD',true,now())
-                on conflict (identificador) do update set
-                    nome = excluded.nome,
-                    email = excluded.email,
-                    curso = excluded.curso,
-                    turma_id = excluded.turma_id,
-                    periodo = excluded.periodo,
-                    situacao = excluded.situacao,
-                    ativo = true,
-                    sincronizado_em = now()
-                where pessoa.origem = 'JACAD'
-                """,
-                registros,
-            )
 
-            # Quem sumiu do ERP e desativado, nao apagado: pode haver
-            # historico de presenca apontando para ele.
-            desativados = await conexao.fetchval(
-                """
-                update pessoa set ativo = false
-                where origem = 'JACAD' and ativo
-                  and identificador <> all($1::text[])
-                returning 1
-                """,
-                [a["ra"] for a in alunos],
-            )
-            desativados = desativados or 0
+                # Quem sumiu do ERP e desativado, nao apagado: pode haver
+                # historico de presenca apontando para ele.
+                #
+                # A contagem sai de um CTE porque `fetchval` sobre
+                # `update ... returning 1` devolveria o 1 da primeira linha, e
+                # nao quantas foram alteradas - o numero reportado aqui era
+                # sempre 0 ou 1.
+                desativados = await conexao.fetchval(
+                    """
+                    with alterados as (
+                        update pessoa
+                           set ativo = false, atualizado_em = now()
+                         where origem = 'JACAD' and ativo and tipo_codigo = $1
+                           and identificador <> all($2::text[])
+                        returning 1
+                    )
+                    select count(*) from alterados
+                    """,
+                    tipo,
+                    [r["identificador"] for r in pessoas],
+                )
 
-            gravados = await conexao.fetchval(
-                "select count(*) from pessoa where origem = 'JACAD' and ativo"
-            )
+                gravados = await conexao.fetchval(
+                    """
+                    select count(*) from pessoa
+                     where origem = 'JACAD' and ativo and tipo_codigo = $1
+                    """,
+                    tipo,
+                )
+
+                detalhe[tipo] = {
+                    "recebidos": len(pessoas),
+                    "gravados": gravados or 0,
+                    "desativados": desativados or 0,
+                }
     finally:
         await conexao.close()
 
     return {
-        "recebidos": len(alunos),
-        "gravados": gravados,
-        "desativados": desativados,
+        "recebidos": sum(d["recebidos"] for d in detalhe.values()),
+        "gravados": sum(d["gravados"] for d in detalhe.values()),
+        "desativados": sum(d["desativados"] for d in detalhe.values()),
+        "por_tipo": detalhe,
     }
 
 

@@ -339,6 +339,8 @@ export interface Pessoa {
   email: string | null;
   curso: string | null;
   turma_id: string | null;
+  /** Nome curto da turma no ERP ("ADM 3P"). Nulo quando o ERP nao informa. */
+  turma_nome: string | null;
   periodo: number | null;
   setor: string | null;
   cargo: string | null;
