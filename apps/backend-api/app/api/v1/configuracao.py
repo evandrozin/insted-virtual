@@ -106,6 +106,7 @@ async def testar_jacad(usuario: dict = Depends(requer_edicao)) -> dict:
     try:
         client = obter_client()
         alunos = client.listar_alunos()
+        professores = client.listar_professores()
         turmas = client.listar_turmas()
         aulas = client.listar_grade_horaria()
     except Exception as erro:
@@ -119,6 +120,12 @@ async def testar_jacad(usuario: dict = Depends(requer_edicao)) -> dict:
         "ok": True,
         "modo": "simulado" if parametros.jacad_modo_mock() else "integrado",
         "alunos": len(alunos),
+        "professores": len(professores),
+        # Docente sem matricula nao entra no espelho: nao ha como reconhece-lo
+        # na catraca. Contar aqui avisa antes de alguem estranhar o numero.
+        "professores_sem_matricula": sum(
+            1 for p in professores if not (p.matricula or "").strip()
+        ),
         "turmas": len(turmas),
         "aulas": len(aulas),
         "amostra": [

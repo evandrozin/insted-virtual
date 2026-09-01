@@ -58,7 +58,13 @@ export const Configuracao: React.FC<{ aoFechar: () => void }> = ({ aoFechar }) =
       const r = await testarJacad(token);
       setTeste(
         r.ok
-          ? `Respondeu em modo ${r.modo}: ${r.alunos} alunos, ${r.turmas} turmas, ${r.aulas} aulas.`
+          ? `Respondeu em modo ${r.modo}: ${r.alunos} alunos, ` +
+            `${r.professores} professores, ${r.turmas} turmas, ${r.aulas} aulas.` +
+            // Docente sem matricula fica de fora do cruzamento com a catraca:
+            // melhor avisar aqui que deixar alguem estranhar o numero depois.
+            (r.professores_sem_matricula
+              ? ` Atenção: ${r.professores_sem_matricula} professor(es) sem matrícula ficam fora do cruzamento com a catraca.`
+              : '')
           : `Falhou: ${r.erro}`,
       );
     } catch (e) {

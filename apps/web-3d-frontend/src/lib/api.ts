@@ -113,7 +113,8 @@ export const reativarSala = (codigo: string, token: string) =>
 export const buscarIntegracoes = () => get<Integracoes>('/config/integracoes');
 
 export const testarJacad = (token: string) =>
-  enviar<{ ok: boolean; modo: string; alunos?: number; turmas?: number;
+  enviar<{ ok: boolean; modo: string; alunos?: number; professores?: number;
+           professores_sem_matricula?: number; turmas?: number;
            aulas?: number; erro?: string;
            amostra?: Array<{ identificador: string; nome: string; curso: string }> }>(
     'POST', '/config/testar/jacad', undefined, token,
