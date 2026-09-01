@@ -63,7 +63,27 @@ def principal() -> int:
             falhas.append("chamada vazia para aula ativa")
 
         # 4. Passagem na catraca promove a cadeira para OCUPADA
-        alvo = chamada[0]
+        #
+        # Nem todo matriculado tem carteira: a Multiuso tem 30 lugares e recebe
+        # turma de 38: 8 ficam de fora, e quem nao tem carteira nao aparece na
+        # maquete - isso e sobrelotacao sendo reportada, nao defeito. Pegar
+        # chamada[0] as cegas caia justamente num desses e acusava falha no
+        # rastreio.
+        com_carteira = [r for r in chamada if r["cadeira_id"]]
+        sem_carteira = [r for r in chamada if not r["cadeira_id"]]
+        print(f"[3b] carteiras: {len(com_carteira)} reservadas, "
+              f"{len(sem_carteira)} sem lugar (sobrelotacao)")
+        if not com_carteira:
+            # Sem ninguem sentado nao ha o que rastrear: os passos seguintes
+            # falhariam em cascata e esconderiam a causa real.
+            falhas.append("nenhum matriculado recebeu carteira na aula ativa")
+            print()
+            print("FALHAS:")
+            for f in falhas:
+                print(f"  - {f}")
+            return 1
+
+        alvo = com_carteira[0]
         resposta = client.post(
             "/api/v1/catracas/evento",
             json={"ra": alvo["ra"], "catraca_id": "CATRACA_PRINCIPAL_A",

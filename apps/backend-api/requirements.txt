@@ -16,5 +16,11 @@ asyncpg>=0.30
 # Tokens de sessao para a edicao do cadastro (obrigatorio com JWT_SECRET).
 PyJWT>=2.8
 
+# Base de fusos horarios. Nao e opcional: a grade e hora de parede local e o
+# zoneinfo da biblioteca padrao nao carrega base nenhuma sozinho. Windows nunca
+# tem /usr/share/zoneinfo, e as imagens enxutas de serverless tambem nao - sem
+# este pacote o app nao importa.
+tzdata>=2025.1
+
 # Somente para os testes: emula um servidor Redis em processo.
 # fakeredis>=2.30

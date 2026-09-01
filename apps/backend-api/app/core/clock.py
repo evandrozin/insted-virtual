@@ -17,21 +17,38 @@ start recomecaria a contagem.
 from __future__ import annotations
 
 import os
-from datetime import datetime, time, timedelta
+from datetime import datetime, time, timedelta, timezone, tzinfo
 from typing import Optional
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 # Campo Grande/MS (UTC-4). Trocavel por ambiente para outra unidade.
 FUSO_PADRAO = "America/Campo_Grande"
 
+# Ultimo recurso, se nao houver base de fusos alguma. Campo Grande nao pratica
+# horario de verao desde 2019, entao o deslocamento fixo confere o ano inteiro
+# para o padrao - mas nao para um TIMEZONE qualquer, por isso o nome degradado
+# aparece na tela de Configuracao em vez de fingir que esta tudo certo.
+OFFSET_PADRAO = timedelta(hours=-4)
 
-def _resolver_fuso() -> ZoneInfo:
+
+def _resolver_fuso() -> tzinfo:
+    """Resolve o fuso sem nunca derrubar a importacao do modulo.
+
+    Duas falhas diferentes cabem aqui. Um TIMEZONE escrito errado e um erro de
+    configuracao, e cair no padrao resolve. Ja a ausencia da base de fusos e um
+    erro de ambiente: o padrao falha igual, e antes desta funcao existir isso
+    subia na importacao e devolvia 500 em todas as rotas.
+    """
     nome = os.getenv("TIMEZONE", "").strip() or FUSO_PADRAO
-    try:
-        return ZoneInfo(nome)
-    except (ZoneInfoNotFoundError, ValueError):
-        print(f"[relogio] fuso desconhecido: {nome!r}; usando {FUSO_PADRAO}")
-        return ZoneInfo(FUSO_PADRAO)
+    for tentativa in dict.fromkeys((nome, FUSO_PADRAO)):
+        try:
+            return ZoneInfo(tentativa)
+        except (ZoneInfoNotFoundError, ValueError) as erro:
+            print(f"[relogio] fuso indisponivel: {tentativa!r} ({erro})")
+
+    print("[relogio] sem base de fusos; assumindo UTC-4 fixo. "
+          "Instale o pacote tzdata para voltar ao normal.")
+    return timezone(OFFSET_PADRAO, f"{FUSO_PADRAO} (offset fixo)")
 
 
 _FUSO = _resolver_fuso()

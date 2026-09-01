@@ -181,13 +181,39 @@ app.include_router(ws.router)
 
 
 
+def _contar_endpoints() -> int:
+    """Numero de operacoes servidas, entrando nos roteadores incluidos.
+
+    `len(app.routes)` nao serve: a partir do Starlette 1.6 cada include_router
+    vira um unico objeto agregador em vez de espalhar as rotas na lista. O
+    numero despencaria de 43 para 13 sem nada ter sido perdido - justo o
+    oposto do que este campo deve indicar.
+    """
+    vistas: set[tuple[str, str]] = set()
+
+    def andar(rotas) -> None:
+        for rota in rotas:
+            interno = getattr(rota, "original_router", None)
+            if interno is not None:
+                andar(interno.routes)
+                continue
+            caminho = getattr(rota, "path", None)
+            if caminho:
+                for metodo in getattr(rota, "methods", None) or {"WS"}:
+                    vistas.add((metodo, caminho))
+
+    andar(app.routes)
+    return len(vistas)
+
+
 @app.get("/health", tags=["infra"])
 async def health() -> dict:
     """Saude e identidade do build.
 
     `versao` e `commit` existem para conferir qual codigo esta no ar sem ter
     que deduzir pelas rotas - foi assim que descobrimos que a Vercel servia um
-    build de tres dias antes.
+    build de tres dias antes. Prefira os dois a `rotas`, que so diz quantas
+    operacoes existem e pode coincidir entre builds diferentes.
     """
     import os
 
@@ -197,7 +223,7 @@ async def health() -> dict:
         "servico": settings.PROJECT_NAME,
         "versao": VERSAO,
         "commit": commit[:7] if commit else "local",
-        "rotas": len(app.routes),
+        "rotas": _contar_endpoints(),
         "relogio": clock.agora().isoformat(),
         "fuso": clock.fuso(),
         "estado": obter_store().nome,
