@@ -186,11 +186,80 @@ RACK_POR_PAVIMENTO: Dict[Pavimento, str] = {
     Pavimento.TERRACO: "RACK_3",
 }
 
-# Preencher com a lista da Secretaria (planta -> ensalamento).
-# Convencao observada no Controle de Ensalamento: sufixo A = Terreo,
-# B = 1o Pavimento, C = 2o Pavimento.
+# Planta -> ensalamento, confirmado contra a API do JaCad em 01/09/2026 (as 35
+# salas com horario no periodo 20262) e com a convencao do sufixo confirmada
+# pela direcao: A = Terreo, B = 1o Pavimento, C = 2o Pavimento.
+#
+# Os 32 codigos numerados casaram um a um pelo numero da sala mais o andar.
+# Nao ha adivinhacao aqui: cada entrada abaixo tem horario real no ERP.
 CODIGO_ENSALAMENTO: Dict[str, str] = {
-    # "S1_01": "01B",
+    # Terreo (sufixo A). A direcao informou: 01A a 06A, Lab Inf 1A, Lab Inf 2A
+    # e Lab Odonto - 9 ambientes, que e o que a planta tem. Mas a numeracao da
+    # planta e da Secretaria so coincide ate a 04: a planta rotula as salas 05 e
+    # 06 como laboratorios de informatica, entao as salas 05A e 06A da
+    # Secretaria caem nas SALA 07..09 da planta, em ordem desconhecida.
+    "ST_01": "01A",
+    "ST_02": "02A",
+    "ST_03": "03A",
+    "ST_04": "04A",
+    "ST_05": "LAB INF 1A",
+    "ST_06": "LAB INF 2A",
+
+    # 1o Pavimento (sufixo B). Nao ha 12B no periodo 20262.
+    "S1_01": "01B",
+    "S1_02": "02B",
+    "S1_03": "03B",
+    "S1_04": "04B",
+    "S1_05": "05B",
+    "S1_06": "06B",
+    "S1_07": "07B",
+    "S1_08": "08B",
+    "S1_09": "09B",
+    "S1_10": "10B",
+    "S1_11": "11B",
+    "S1_13": "13B",
+
+    # 2o Pavimento (sufixo C). A direcao informou 01C a 18C mais Lab Info 1C e
+    # 2C: 20 ambientes, exatamente as SALA 01..20 da planta. Os 18 numerados sao
+    # confirmados pelo ERP e os dois laboratorios fecham a contagem.
+    "S2_01": "01C",
+    "S2_02": "02C",
+    "S2_03": "03C",
+    "S2_04": "04C",
+    "S2_05": "05C",
+    "S2_06": "06C",
+    "S2_07": "07C",
+    "S2_08": "08C",
+    "S2_09": "09C",
+    "S2_10": "10C",
+    "S2_11": "11C",
+    "S2_12": "12C",
+    "S2_13": "13C",
+    "S2_14": "14C",
+    "S2_15": "15C",
+    "S2_16": "16C",
+    "S2_17": "17C",
+    "S2_18": "18C",
+    "S2_19": "LAB INF 1C",
+    "S2_20": "LAB INF 2C",
+}
+
+# Divergencias entre o inventario da direcao e a planta, ainda sem resolver.
+# Nenhuma bloqueia o periodo 20262, porque o ERP nao usa esses ambientes agora -
+# mas vao aparecer quando usar, e e melhor estarem escritas do que adivinhadas.
+#
+#   Terreo    A planta tem SALA 07, 08 e 09 sobrando; a direcao lista 05A, 06A e
+#             Lab Odonto. Sao os mesmos tres ambientes, em ordem desconhecida.
+#   1o Pav    A direcao lista 01B a 13B mais Lab Info 1B (14 ambientes de aula);
+#             a planta tem 16 salas numeradas. Sobram S1_14, S1_15 e S1_16, e
+#             uma delas deve ser o Lab Info 1B.
+#   Prajur    Fica no bloco NUCLEO DE PRATICAS INTEGRADAS, outro predio, fora
+#             das plantas da Sigma. Por decisao da direcao segue fora da maquete:
+#             as aulas contam nos numeros, sem sala desenhada.
+ENSALAMENTO_PENDENTE = ("Prajur",)
+ENSALAMENTO_AMBIGUO = {
+    "TERREO": ("05A", "06A", "Lab Odonto"),
+    "PAV_1": ("Lab Info 1B",),
 }
 
 # Catracas do terreo (Proposta 4466.0). Posicoes no eixo da recepcao.

@@ -21,6 +21,9 @@ def ancora_letiva(hora: str = "19:20") -> str:
 # Relogio ancorado num horario letivo para o teste ser deterministico.
 os.environ.setdefault("RELOGIO_DEMO", ancora_letiva())
 os.environ.setdefault("SIMULADOR_ATIVO", "false")
+# Teste nao fala com o ERP: seria lento, exigiria credencial e o resultado
+# mudaria conforme a secretaria mexesse nos dados.
+os.environ["JACAD_MODO_MOCK"] = "true"
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 

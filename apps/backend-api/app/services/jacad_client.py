@@ -274,97 +274,24 @@ class JacadMockClient:
 
 
 # ---------------------------------------------------------------------------
-# Client REST real
+# Selecao do client
 # ---------------------------------------------------------------------------
 
-
-class JacadRestClient:
-    """Consome a API do JACAD. Ajuste os paths conforme o contrato do tenant."""
-
-    def __init__(self, base_url: str, token: str, timeout: float = 20.0) -> None:
-        import httpx  # import tardio: so necessario no modo integrado
-
-        self._http = httpx.Client(
-            base_url=base_url.rstrip("/"),
-            headers={"Authorization": f"Bearer {token}",
-                     "Accept": "application/json"},
-            timeout=timeout,
-        )
-
-    def _get(self, path: str) -> list:
-        resposta = self._http.get(path)
-        resposta.raise_for_status()
-        corpo = resposta.json()
-        return corpo.get("data", corpo) if isinstance(corpo, dict) else corpo
-
-    def listar_alunos(self) -> List[AlunoModel]:
-        return [
-            AlunoModel(
-                ra=str(item["registroAcademico"]),
-                nome=item["nome"],
-                curso=item.get("curso", {}).get("nome", "Nao informado"),
-                turma_id=str(item.get("turma", {}).get("codigo", "SEM-TURMA")),
-                periodo=int(item.get("periodo", 1)),
-                situacao=item.get("situacao", "ATIVO"),
-            )
-            for item in self._get("/academico/alunos?situacao=ATIVO")
-        ]
-
-    def listar_professores(self) -> List[ProfessorModel]:
-        """Corpo docente ativo.
-
-        `matricula` e o campo que precisa bater com o cracha da catraca. Se o
-        tenant expuser outro nome para ele, e aqui que se ajusta.
-        """
-        return [
-            ProfessorModel(
-                matricula=str(item.get("matricula") or item.get("registroFuncional")),
-                nome=item["nome"],
-                email=item.get("email"),
-                setor=item.get("departamento", {}).get("nome")
-                if isinstance(item.get("departamento"), dict)
-                else item.get("departamento"),
-                cargo=item.get("cargo", "Docente"),
-                situacao=item.get("situacao", "ATIVO"),
-            )
-            for item in self._get("/academico/professores?situacao=ATIVO")
-        ]
-
-    def listar_turmas(self) -> List[TurmaModel]:
-        return [
-            TurmaModel(
-                id=str(item["codigo"]),
-                nome=item["nome"],
-                curso=item.get("curso", {}).get("nome", "Nao informado"),
-                periodo=int(item.get("periodo", 1)),
-                alunos_ra=[str(ra) for ra in item.get("alunos", [])],
-            )
-            for item in self._get("/academico/turmas")
-        ]
-
-    def listar_grade_horaria(self) -> List[AulaModel]:
-        return [
-            AulaModel(
-                id=str(item["id"]),
-                turma_id=str(item["turmaCodigo"]),
-                disciplina=item["disciplina"],
-                professor=item.get("professor", "A definir"),
-                professor_matricula=(
-                    str(item["professorMatricula"])
-                    if item.get("professorMatricula") else None
-                ),
-                sala_id=str(item["salaCodigo"]),
-                dia_semana=int(item["diaSemana"]),
-                hora_inicio=time.fromisoformat(item["horaInicio"]),
-                hora_fim=time.fromisoformat(item["horaFim"]),
-            )
-            for item in self._get("/academico/grade-horaria")
-        ]
-
-
 def obter_client() -> JacadClient:
-    # O endereco e o modo podem vir do banco; o token continua so no ambiente.
+    """Client real quando ha endereco e a simulacao esta desligada.
+
+    O endereco e o modo podem vir do banco; a chave continua so no ambiente.
+    """
     base_url = parametros.jacad_base_url()
     if parametros.jacad_modo_mock() or not base_url:
         return JacadMockClient()
-    return JacadRestClient(base_url, settings.JACAD_TOKEN)
+
+    from app.services.jacad_rest import JacadRestClient
+
+    return JacadRestClient(
+        base_url,
+        settings.JACAD_TOKEN,
+        periodo_letivo=settings.JACAD_PERIODO_LETIVO or None,
+        unidade_fisica=settings.JACAD_UNIDADE_FISICA or None,
+        id_org=settings.JACAD_ID_ORG,
+    )

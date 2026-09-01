@@ -30,6 +30,16 @@ class Settings:
     # Sem credenciais reais o adapter cai no dataset sintetico determinstico.
     JACAD_MODO_MOCK: bool = _bool("JACAD_MODO_MOCK", True)
     JACAD_SYNC_INTERVAL_S: int = _int("JACAD_SYNC_INTERVAL_S", 900)
+    # Periodo letivo do ERP. Vazio => deduzido do proprio JaCad (o periodo de
+    # graduacao mais recente entre as matriculas ativas), porque o endpoint de
+    # periodos exige idOrg e o token de integracao volta sem ele.
+    JACAD_PERIODO_LETIVO: int = _int("JACAD_PERIODO_LETIVO", 0)
+    # So a unidade presencial aparece na maquete. "Insted Digital" tem aula sem
+    # sala fisica, e contaria gente que nunca passa na catraca.
+    JACAD_UNIDADE_FISICA: str = os.getenv("JACAD_UNIDADE_FISICA", "Insted")
+    # 0 = INSTED Centro Universitario; 1 = Escola de Saude. A consulta de
+    # periodos letivos exige a organizacao e o token nao a informa.
+    JACAD_ID_ORG: int = _int("JACAD_ID_ORG", 0)
 
     # --- Regras de presenca -----------------------------------------------
     TOLERANCIA_ATRASO_MIN: int = _int("TOLERANCIA_ATRASO_MIN", 15)

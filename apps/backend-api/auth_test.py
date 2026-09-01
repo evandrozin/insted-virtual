@@ -25,6 +25,7 @@ os.environ.setdefault("SIMULADOR_ATIVO", "false")
 os.environ.setdefault("JWT_SECRET", "segredo-apenas-de-teste-com-tamanho-suficiente-123456")
 os.environ.setdefault("DATABASE_URL", "postgresql://faz-de-conta/teste")
 
+os.environ["JACAD_MODO_MOCK"] = "true"  # nao fala com o ERP real
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from app.core.seguranca import gerar_hash_senha  # noqa: E402

@@ -14,6 +14,7 @@ import os
 import sys
 from datetime import datetime
 
+os.environ["JACAD_MODO_MOCK"] = "true"  # nao fala com o ERP real
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from app.models.academico import RegistroPresenca  # noqa: E402
