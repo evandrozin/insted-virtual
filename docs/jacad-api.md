@@ -101,3 +101,21 @@ O sufixo A/B/C aparenta ser o pavimento, mas **isso ainda não está confirmado*
 é o que falta casar com os códigos das plantas da Sigma em `campus_seed.py`.
 
 85 professores distintos aparecem nas disciplinas do período.
+
+
+## O token e restrito por IP
+
+Cadastrado no acadêmico desktop, o token vale só para os IPs autorizados nele.
+Fora deles a troca falha com **HTTP 422**:
+
+```json
+{ "message": "A autenticação deste token não está autorizada para o IP 'x.x.x.x'",
+  "details": "/api/v1/auth/token", "status": 422 }
+```
+
+Foi o que aconteceu ao publicar no Render: funcionava na máquina de
+desenvolvimento, cujo IP está liberado, e falhava no servidor. Ao trocar de
+hospedagem — ou quando o provedor mudar de faixa — é preciso liberar os IPs de
+saída novos. No Render eles ficam em *Connect → Outbound IP addresses*, e são
+mais de um: liberar só o que apareceu na mensagem deixa a falha voltar de forma
+intermitente, quando a chamada sair por outro.

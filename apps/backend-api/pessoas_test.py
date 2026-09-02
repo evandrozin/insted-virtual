@@ -3,7 +3,15 @@
 E contra esta base que a conferencia com a catraca e feita, entao o que se
 valida aqui e menos "gravou?" e mais "gravou sem estragar o resto?".
 
-Usa o banco configurado no .env e devolve a base ao estado espelhado no fim.
+CUIDADO: este teste reescreve a tabela `pessoa`. Ele roda em modo simulado, e a
+"restauracao" do final devolve o conjunto sintetico - nao o cadastro real. Rodar
+contra o banco de producao apaga as pessoas do ERP e poe 1.732 alunos ficticios
+no lugar. Ja aconteceu uma vez.
+
+Por isso ele exige PERMITIR_TESTE_DESTRUTIVO=1 e so roda quando o banco nao tem
+cadastro vindo do ERP real. Para reespelhar depois de rodar:
+
+    python -c "import asyncio,sys; sys.path.insert(0,'.');                from app.core import parametros;                from app.services.cadastro_pessoas import espelhar;                print(asyncio.run(espelhar()))"
 """
 import asyncio
 import os
@@ -37,6 +45,28 @@ async def principal() -> int:
 
     if not settings.DATABASE_URL:
         print("Sem DATABASE_URL: este teste exige banco.")
+        return 0
+
+    if os.getenv("PERMITIR_TESTE_DESTRUTIVO") != "1":
+        print("Pulado: reescreve a tabela pessoa com dados sinteticos.")
+        print("Para rodar num banco descartavel: PERMITIR_TESTE_DESTRUTIVO=1")
+        return 0
+
+    # Segunda barreira: mesmo autorizado, nao roda sobre cadastro do ERP real.
+    # O mock gera RA na faixa 2026xxxx; o ERP usa outra. Se o que esta no banco
+    # nao bate com o que o mock produz, e cadastro de verdade.
+    conexao = await abrir()
+    try:
+        real = await conexao.fetchval(
+            """select count(*) from pessoa
+                where origem = 'JACAD' and tipo_codigo = 'PROFESSOR' and ativo
+                  and identificador !~ '^3[0-9]{7}$'"""
+        )
+    finally:
+        await conexao.close()
+    if real:
+        print(f"Pulado: o banco tem {real} professor(es) do ERP real.")
+        print("Rodar aqui apagaria o cadastro de producao.")
         return 0
 
     client = obter_client()
