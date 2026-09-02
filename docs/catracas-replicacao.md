@@ -84,9 +84,15 @@ O script pronto está em [`scripts/replicar-catracas.ps1`](../scripts/replicar-c
 
 **Antes**, uma vez no servidor:
 
-1. Coloque o `Npgsql.dll` numa pasta do servidor (o `.nupkg` do NuGet é um
-   `.zip`; o DLL está em `lib/net8.0/`). Ajuste `$DllNpgsql` no script para esse
-   caminho.
+1. Instale o **driver ODBC do PostgreSQL** (psqlODBC), 64 bits — um MSI:
+   <https://www.postgresql.org/ftp/odbc/versions/msi/>
+
+   Escolhido em vez do Npgsql de propósito. O Npgsql 8 só publica build para
+   .NET moderno, e o `powershell.exe` do Windows roda sobre .NET Framework: a
+   biblioteca carrega e falha por assembly incompatível. Versões antigas do
+   Npgsql funcionariam, mas arrastam meia dúzia de DLLs de dependência. O
+   `System.Data.Odbc` já faz parte do .NET Framework — nada para resolver.
+
 2. Defina as credenciais como variáveis de ambiente **de máquina** — as de
    usuário o serviço do Agent não enxerga:
 
@@ -111,7 +117,7 @@ O script pronto está em [`scripts/replicar-catracas.ps1`](../scripts/replicar-c
   ```
 
   Use `CmdExec`, não o tipo `PowerShell`: o host de PowerShell do Agent é
-  restrito e costuma falhar ao carregar assemblies externos como o Npgsql.
+  restrito e costuma falhar em cmdlets de sistema como o `Get-OdbcDriver`.
 
 * **Schedules** → `New`: recorrente, diariamente, **a cada 3 minutos**, das
   00:00:00 às 23:59:59.

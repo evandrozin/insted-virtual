@@ -11,36 +11,35 @@
     dele, e mexer nelas quebra o que ja funciona - num sistema diferente, semanas
     depois, sem ligacao obvia com isto aqui.
 
-.PRE_REQUISITOS
-    Npgsql.dll acessivel ao PowerShell. Uma vez, no servidor:
+.PRE_REQUISITO
+    Driver ODBC do PostgreSQL (psqlODBC), 64 bits. Um MSI, uma vez:
 
-        # baixe o pacote e extraia o DLL para C:\ferramentas\Npgsql
-        nuget install Npgsql -Version 8.0.3 -OutputDirectory C:\temp\npgsql
-        # ou baixe de https://www.nuget.org/packages/Npgsql (o .nupkg e um .zip)
+        https://www.postgresql.org/ftp/odbc/versions/msi/
 
-    Ajuste $DllNpgsql abaixo para o caminho onde ficou.
+    Escolhido em vez do Npgsql de proposito. O Npgsql 8 so tem build para .NET
+    moderno, e o powershell.exe do Windows roda sobre .NET Framework - a
+    biblioteca carrega e falha por assembly incompativel. Versoes antigas do
+    Npgsql funcionariam, mas arrastam meia duzia de DLLs de dependencia. O ODBC
+    ja vem com System.Data.Odbc, que faz parte do .NET Framework.
 
 .CREDENCIAIS
     Vem do ambiente, nunca do arquivo - este script fica versionado no Git.
-    Defina como variaveis de ambiente de MAQUINA (nao de usuario, senao o SQL
-    Agent nao enxerga):
+    Defina em Propriedades do Sistema > Variaveis de Ambiente, na caixa de baixo
+    (System variables). A de cima e do usuario logado, e o servico do Agent roda
+    com outra conta - nao enxerga:
 
-        [Environment]::SetEnvironmentVariable('PGHOST','aws-0-sa-east-1.pooler.supabase.com','Machine')
-        [Environment]::SetEnvironmentVariable('PGUSER','postgres.vbmdwkwakssenpvtumvg','Machine')
-        [Environment]::SetEnvironmentVariable('PGPASSWORD','...','Machine')
+        PGHOST      aws-0-sa-east-1.pooler.supabase.com
+        PGUSER      postgres.<ref-do-projeto>
+        PGPASSWORD  ...
 
-    Reinicie o servico do SQL Agent depois de definir.
+    Reinicie o servico do SQL Server Agent depois de definir.
 #>
 
 $ErrorActionPreference = 'Stop'
 
 # --- configuracao -----------------------------------------------------------
-$DllNpgsql   = 'C:\ferramentas\Npgsql\Npgsql.dll'
-$OrigemSql   = 'Server=10.25.0.81,1433;Database=ACESSOTA;Integrated Security=true;TrustServerCertificate=true'
-$DestinoHost = $env:PGHOST
-$DestinoUser = $env:PGUSER
-$DestinoSenha = $env:PGPASSWORD
-$DestinoBase = 'postgres'
+$OrigemSql    = 'Server=10.25.0.81,1433;Database=ACESSOTA;Integrated Security=true;TrustServerCertificate=true'
+$DestinoBase  = 'postgres'
 $DestinoPorta = 5432
 
 # Recuo aplicado a marca dagua. Cobre transacoes que ainda nao tinham commitado
@@ -54,30 +53,53 @@ $RecuoMinutos = 10
 # Com teto ele avanca aos poucos, execucao a execucao, ate alcancar o presente.
 $MaxPorExecucao = 20000
 
-# --- inicio -----------------------------------------------------------------
-if (-not $DestinoSenha) {
-    throw 'PGPASSWORD nao definida no ambiente da maquina. Veja o cabecalho.'
+# Linhas por INSERT. Cada comando e uma ida e volta ate o Supabase; uma por linha
+# levaria horas na carga inicial. Com 200, os 12 campos dao 2.400 parametros por
+# comando - bem abaixo do limite de 65.535 do protocolo.
+$LinhasPorLote = 200
+
+$Colunas = @(
+    'mar_id','mar_terminal','mar_pessoa','mar_datahora','mar_funcao',
+    'mar_status','mar_statusbasico','mar_cracha','mar_sentido',
+    'mar_tipo','mar_origem','mar_datahorainc'
+)
+
+# --- pre-requisitos ---------------------------------------------------------
+$driver = (Get-OdbcDriver -Platform 64-bit -ErrorAction SilentlyContinue |
+           Where-Object Name -like 'PostgreSQL*Unicode*' |
+           Select-Object -First 1).Name
+if (-not $driver) {
+    throw ("Driver ODBC do PostgreSQL (64 bits) nao encontrado. " +
+           "Instale o psqlODBC: https://www.postgresql.org/ftp/odbc/versions/msi/")
 }
-Add-Type -Path $DllNpgsql
 
-$conexaoPg = "Host=$DestinoHost;Port=$DestinoPorta;Database=$DestinoBase;" +
-             "Username=$DestinoUser;Password=$DestinoSenha;SSL Mode=Require;" +
-             "Trust Server Certificate=true;Timeout=30;Command Timeout=120"
+foreach ($v in 'PGHOST','PGUSER','PGPASSWORD') {
+    if (-not (Get-Item "env:$v" -ErrorAction SilentlyContinue).Value) {
+        throw ("$v nao esta definida. Defina em System variables (caixa de baixo) " +
+               "e reinicie o servico do SQL Server Agent. Veja o cabecalho.")
+    }
+}
 
-$pg = New-Object Npgsql.NpgsqlConnection($conexaoPg)
+$conexaoPg = "Driver={$driver};Server=$($env:PGHOST);Port=$DestinoPorta;" +
+             "Database=$DestinoBase;Uid=$($env:PGUSER);Pwd=$($env:PGPASSWORD);" +
+             "SSLmode=require;"
+
+function Registrar($mensagem) {
+    Write-Output ("[{0:yyyy-MM-dd HH:mm:ss}] {1}" -f (Get-Date), $mensagem)
+}
+
+# --- inicio -----------------------------------------------------------------
+$pg = New-Object System.Data.Odbc.OdbcConnection($conexaoPg)
 $pg.Open()
 
 try {
     # 1. Marca dagua: o proprio destino responde ate onde ja chegou. Nao ha
     #    estado guardado em arquivo para dessincronizar.
     $cmd = $pg.CreateCommand()
-    $cmd.CommandText = @'
-select coalesce(max(mar_datahorainc), timestamp '2000-01-01')
-  from catraca.gac_marcacao
-'@
+    $cmd.CommandText = "select coalesce(max(mar_datahorainc), timestamp '2000-01-01') from catraca.gac_marcacao"
     $marca = [datetime]$cmd.ExecuteScalar()
     $desde = $marca.AddMinutes(-$RecuoMinutos)
-    Write-Output ("[{0:HH:mm:ss}] marca d'agua {1:yyyy-MM-dd HH:mm:ss}, lendo desde {2:yyyy-MM-dd HH:mm:ss}" -f (Get-Date), $marca, $desde)
+    Registrar ("marca d'agua {0:yyyy-MM-dd HH:mm:ss}; lendo desde {1:yyyy-MM-dd HH:mm:ss}" -f $marca, $desde)
 
     # 2. Origem: so o que entrou depois. O filtro e por MAR_DATAHORAINC, hora de
     #    insercao, e nao por MAR_DATAHORA, hora da passagem - catraca que ficou
@@ -87,7 +109,7 @@ select coalesce(max(mar_datahorainc), timestamp '2000-01-01')
     $sql.Open()
     try {
         $consulta = $sql.CreateCommand()
-        $consulta.CommandTimeout = 120
+        $consulta.CommandTimeout = 300
         $consulta.CommandText = @"
 SELECT TOP ($MaxPorExecucao)
        MAR_ID, MAR_TERMINAL, MAR_PESSOA, MAR_DATAHORA, MAR_FUNCAO,
@@ -106,44 +128,53 @@ SELECT TOP ($MaxPorExecucao)
     finally { $sql.Close() }
 
     if ($tabela.Rows.Count -eq 0) {
-        Write-Output ("[{0:HH:mm:ss}] nada novo" -f (Get-Date))
+        Registrar 'nada novo'
         exit 0
     }
 
-    # 3. Destino, numa transacao so. ON CONFLICT DO NOTHING e o que torna o job
-    #    seguro de repetir: se cair no meio, rodar de novo nao duplica, e as
-    #    linhas da sobreposicao sao descartadas em silencio.
+    # 3. Destino, em lotes, numa transacao so. ON CONFLICT DO NOTHING e o que
+    #    torna o job seguro de repetir: se cair no meio, rodar de novo nao
+    #    duplica, e as linhas da sobreposicao somem em silencio.
     $tx = $pg.BeginTransaction()
-    $ins = $pg.CreateCommand()
-    $ins.Transaction = $tx
-    $ins.CommandText = @'
-insert into catraca.gac_marcacao
-    (mar_id, mar_terminal, mar_pessoa, mar_datahora, mar_funcao,
-     mar_status, mar_statusbasico, mar_cracha, mar_sentido,
-     mar_tipo, mar_origem, mar_datahorainc)
-values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-on conflict (mar_id) do nothing
-'@
-    1..12 | ForEach-Object { $ins.Parameters.Add((New-Object Npgsql.NpgsqlParameter)) | Out-Null }
-    $ins.Prepare()
-
     $gravadas = 0
-    foreach ($linha in $tabela.Rows) {
-        for ($i = 0; $i -lt 12; $i++) {
-            $valor = $linha[$i]
-            $ins.Parameters[$i].Value = if ($valor -is [System.DBNull]) { [DBNull]::Value } else { $valor }
+    try {
+        for ($inicio = 0; $inicio -lt $tabela.Rows.Count; $inicio += $LinhasPorLote) {
+            $fim = [Math]::Min($inicio + $LinhasPorLote, $tabela.Rows.Count) - 1
+            $lote = $inicio..$fim
+
+            $grupos = $lote | ForEach-Object { '(' + (($Colunas | ForEach-Object { '?' }) -join ',') + ')' }
+            $ins = $pg.CreateCommand()
+            $ins.Transaction = $tx
+            $ins.CommandTimeout = 300
+            $ins.CommandText = "insert into catraca.gac_marcacao (" +
+                               ($Colunas -join ',') + ") values " + ($grupos -join ',') +
+                               " on conflict (mar_id) do nothing"
+
+            foreach ($i in $lote) {
+                foreach ($c in 0..($Colunas.Count - 1)) {
+                    $valor = $tabela.Rows[$i][$c]
+                    # O ODBC nao aceita DBNull vindo do DataTable direto em
+                    # parametro posicional; converter aqui evita erro de tipo.
+                    if ($valor -is [System.DBNull]) { $valor = [DBNull]::Value }
+                    [void]$ins.Parameters.AddWithValue("p$($i)_$c", $valor)
+                }
+            }
+            $gravadas += $ins.ExecuteNonQuery()
         }
-        $gravadas += $ins.ExecuteNonQuery()
+        $tx.Commit()
     }
-    $tx.Commit()
+    catch {
+        $tx.Rollback()
+        throw
+    }
 
     $ultima = $tabela.Rows[$tabela.Rows.Count - 1]['MAR_DATAHORAINC']
-    Write-Output ("[{0:HH:mm:ss}] lidas {1}, gravadas {2} (o resto ja existia). Ate {3:yyyy-MM-dd HH:mm:ss}" -f (Get-Date), $tabela.Rows.Count, $gravadas, $ultima)
+    Registrar ("lidas {0}, gravadas {1} (o resto ja existia). Ate {2:yyyy-MM-dd HH:mm:ss}" -f $tabela.Rows.Count, $gravadas, $ultima)
 
     # Atingiu o teto: ha mais para tras. Avisa para quem le o log saber que a
     # proxima execucao ainda esta correndo atras do presente.
     if ($tabela.Rows.Count -ge $MaxPorExecucao) {
-        Write-Output ("[{0:HH:mm:ss}] teto de {1} atingido; ha mais na fila" -f (Get-Date), $MaxPorExecucao)
+        Registrar ("teto de {0} atingido; ha mais na fila" -f $MaxPorExecucao)
     }
 }
 finally {
