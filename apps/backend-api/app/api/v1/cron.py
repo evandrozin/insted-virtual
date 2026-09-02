@@ -9,6 +9,8 @@ fica apenas como gatilho manual.
 """
 from __future__ import annotations
 
+import asyncio
+
 from fastapi import APIRouter, Header, HTTPException
 
 from app.core import clock
@@ -59,7 +61,11 @@ async def reconciliar(authorization: str | None = Header(default=None)) -> dict:
 @router.get("/cron/sync-jacad")
 async def sync_jacad(authorization: str | None = Header(default=None)) -> dict:
     _autorizar(authorization)
-    resumo = motor.sincronizar_jacad()
+
+    # Em thread separada: o client do ERP e sincrono e a consulta leva minutos.
+    # Chamado direto aqui, ele travaria todas as conexoes do processo - foi o
+    # que devolveu 502 na primeira vez que este endpoint rodou em producao.
+    resumo = await asyncio.to_thread(motor.sincronizar_jacad, True)
 
     # Alem da memoria, atualiza a base local de pessoas: e contra ela que a
     # conferencia com a catraca e feita, entao ela nao pode envelhecer.
