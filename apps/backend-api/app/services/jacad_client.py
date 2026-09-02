@@ -277,21 +277,37 @@ class JacadMockClient:
 # Selecao do client
 # ---------------------------------------------------------------------------
 
+# O cliente REST guarda token e caches de turmas e matriculas. Criar um novo a
+# cada chamada refaria a autenticacao e as consultas pesadas, entao ele e
+# reaproveitado enquanto a configuracao nao mudar.
+_client_rest = None
+_config_rest = None
+
+
 def obter_client() -> JacadClient:
     """Client real quando ha endereco e a simulacao esta desligada.
 
     O endereco e o modo podem vir do banco; a chave continua so no ambiente.
     """
+    global _client_rest, _config_rest
+
     base_url = parametros.jacad_base_url()
     if parametros.jacad_modo_mock() or not base_url:
         return JacadMockClient()
 
     from app.services.jacad_rest import JacadRestClient
 
-    return JacadRestClient(
+    config = (base_url, settings.JACAD_TOKEN, settings.JACAD_PERIODO_LETIVO,
+              settings.JACAD_UNIDADE_FISICA, settings.JACAD_ID_ORG)
+    if _client_rest is not None and _config_rest == config:
+        return _client_rest
+
+    _config_rest = config
+    _client_rest = JacadRestClient(
         base_url,
         settings.JACAD_TOKEN,
         periodo_letivo=settings.JACAD_PERIODO_LETIVO or None,
         unidade_fisica=settings.JACAD_UNIDADE_FISICA or None,
         id_org=settings.JACAD_ID_ORG,
     )
+    return _client_rest

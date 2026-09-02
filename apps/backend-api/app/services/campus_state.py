@@ -75,11 +75,21 @@ class CampusState:
         self,
         alunos: List[AlunoModel],
         turmas: List[TurmaModel],
-        aulas: List[AulaModel],
+        aulas: Optional[List[AulaModel]] = None,
     ) -> None:
+        """Substitui o cadastro academico. `aulas=None` preserva a grade atual.
+
+        A grade do ERP real leva minutos para ser montada; pessoas e turmas vem
+        em segundos. Poder atualizar as duas em ritmos diferentes e o que deixa
+        o painel subir sem esperar pela grade.
+        """
         with self.lock:
             self.alunos = {a.ra: a for a in alunos}
             self.turmas = {t.id: t for t in turmas}
+
+            if aulas is None:
+                self.ultima_sync_jacad = clock.agora()
+                return
 
             validas = [a for a in aulas if a.sala_id in self.salas]
             self.aulas = {a.id: a for a in validas}

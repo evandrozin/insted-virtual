@@ -30,6 +30,13 @@ _tarefas: list[asyncio.Task] = []
 # painel degradado que aponta o problema vale mais que um 500 mudo.
 _falhas_boot: list[dict] = []
 
+# A grade do ERP real custa alguns minutos - uma chamada por disciplina. Prender
+# o boot nela faria o health check da plataforma derrubar o deploy antes de o
+# app existir. Entao ela carrega em segundo plano, e este dicionario deixa o
+# /health e o painel dizerem em que pe esta, em vez de mostrar campus vazio sem
+# explicacao.
+_grade: dict = {"estado": "pendente", "aulas": 0, "erro": None, "concluida_em": None}
+
 
 @contextmanager
 def _etapa(nome: str):
@@ -71,7 +78,9 @@ async def _loop_sync_jacad() -> None:
     while True:
         await asyncio.sleep(parametros.jacad_sync_interval_s())
         try:
-            resumo = motor.sincronizar_jacad()
+            resumo = await asyncio.to_thread(motor.sincronizar_jacad, True)
+            _grade.update(estado="pronta", aulas=resumo["aulas"],
+                          concluida_em=clock.agora().isoformat())
             from app.services.cadastro_pessoas import espelhar
 
             resumo["cadastro"] = await espelhar()
@@ -102,7 +111,9 @@ async def lifespan(app: FastAPI):
         await _carregar_topologia()
 
     with _etapa("JACAD"):
-        resumo = motor.sincronizar_jacad()
+        # Sem a grade, e fora do event loop: o client e sincrono, e chama-lo
+        # aqui direto travaria todas as conexoes durante a consulta.
+        resumo = await asyncio.to_thread(motor.sincronizar_jacad, False)
         print(f"[boot] JACAD carregado: {resumo}")
 
     # Etapa propria: o espelho do cadastro depende do banco, e uma falha nele
@@ -138,6 +149,8 @@ async def lifespan(app: FastAPI):
             print(f"[boot] simulador semeou {semeados} passagens")
             _tarefas.append(asyncio.create_task(simulador.rodar()))
 
+    _tarefas.append(asyncio.create_task(_carregar_grade()))
+
     if _falhas_boot:
         print(f"[boot] subiu com {len(_falhas_boot)} etapa(s) com falha; "
               f"veja /health")
@@ -155,6 +168,35 @@ async def lifespan(app: FastAPI):
     await asyncio.gather(*_tarefas, return_exceptions=True)
     with _etapa("encerramento"):
         await store.encerrar()
+
+
+async def _carregar_grade() -> None:
+    """Monta a grade horaria em segundo plano e avisa o painel quando chega."""
+    _grade["estado"] = "carregando"
+    try:
+        resumo = await asyncio.to_thread(motor.sincronizar_jacad, True)
+        _grade.update(
+            estado="pronta",
+            aulas=resumo["aulas"],
+            erro=None,
+            concluida_em=clock.agora().isoformat(),
+        )
+        print(f"[grade] carregada: {resumo['aulas']} aulas")
+
+        # Com a grade na mao as aulas em andamento precisam abrir agora, senao
+        # o painel so reagiria no proximo tick.
+        deltas = await motor.reconciliar()
+        await difundir({
+            "tipo": "DASHBOARD_TICK",
+            "servidor_em": clock.agora(),
+            "dashboard": await servico_dashboard.snapshot(),
+            **({"deltas": deltas} if deltas else {}),
+        })
+    except asyncio.CancelledError:
+        raise
+    except Exception as erro:
+        _grade.update(estado="falhou", erro=f"{type(erro).__name__}: {erro}")
+        print(f"[grade] falhou: {type(erro).__name__}: {erro}")
 
 
 async def _carregar_topologia() -> None:
@@ -281,5 +323,6 @@ async def health() -> dict:
         "banco": bool(settings.DATABASE_URL),
         "simulador": parametros.simulador_ativo(),
         "falhas_boot": _falhas_boot,
+        "grade": dict(_grade),
         "paineis_conectados": manager.total,
     }

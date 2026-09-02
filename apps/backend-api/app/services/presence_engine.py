@@ -60,16 +60,27 @@ class MotorPresenca:
     # ------------------------------------------------------------------
     # Sincronizacao com o ERP
     # ------------------------------------------------------------------
-    def sincronizar_jacad(self) -> dict:
+    def sincronizar_jacad(self, incluir_grade: bool = True) -> dict:
+        """Traz o academico do ERP. Com `incluir_grade=False`, so pessoas.
+
+        No ERP real a grade custa alguns minutos - uma chamada por disciplina -
+        enquanto alunos e turmas saem em segundos. Separar deixa o painel subir
+        com gente na tela e a grade chegar depois.
+        """
         client = obter_client()
         alunos = client.listar_alunos()
+        # A grade vem antes das turmas de proposito: ao montar a grade o client
+        # descobre as salas compartilhadas e cria as turmas sinteticas que
+        # respondem por elas. Pedir as turmas primeiro deixaria essas de fora, e
+        # o motor nao acharia a chamada da aula.
+        aulas = client.listar_grade_horaria() if incluir_grade else None
         turmas = client.listar_turmas()
-        aulas = client.listar_grade_horaria()
         self.state.carregar_academico(alunos, turmas, aulas)
         return {
             "alunos": len(alunos),
             "turmas": len(turmas),
-            "aulas": len(aulas),
+            "aulas": len(self.state.aulas),
+            "grade_incluida": incluir_grade,
             "sincronizado_em": self.state.ultima_sync_jacad.isoformat(),
         }
 
