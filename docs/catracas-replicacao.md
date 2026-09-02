@@ -78,18 +78,64 @@ Para acompanhamento em tempo real, de 1 em 1 minuto. O volume é pequeno —
 1.500 alunos geram alguns milhares de marcações por dia, e cada execução carrega
 só o que entrou desde a anterior.
 
-## Como executar
+## Onde se cria: SQL Server Agent
 
-Três caminhos, em ordem de preferência:
+O script pronto está em [`scripts/replicar-catracas.ps1`](../scripts/replicar-catracas.ps1).
 
-1. **SQL Agent Job com PowerShell** (`Npgsql`). É o mais direto: um script lê a
-   marca d'água no Postgres, consulta o SQL Server e grava. Sem componente extra
-   no servidor além do driver.
-2. **SSIS**, se a instituição já mantém pacotes — mesma lógica, com o custo de
-   manter o pacote.
-3. **Linked Server via ODBC para PostgreSQL**. Funciona, mas exige instalar e
-   configurar o driver ODBC no servidor de banco, e falhas de rede viram erro de
-   transação distribuída, que é ruim de diagnosticar.
+**Antes**, uma vez no servidor:
+
+1. Coloque o `Npgsql.dll` numa pasta do servidor (o `.nupkg` do NuGet é um
+   `.zip`; o DLL está em `lib/net8.0/`). Ajuste `$DllNpgsql` no script para esse
+   caminho.
+2. Defina as credenciais como variáveis de ambiente **de máquina** — as de
+   usuário o serviço do Agent não enxerga:
+
+   ```powershell
+   [Environment]::SetEnvironmentVariable('PGHOST','aws-0-sa-east-1.pooler.supabase.com','Machine')
+   [Environment]::SetEnvironmentVariable('PGUSER','postgres.vbmdwkwakssenpvtumvg','Machine')
+   [Environment]::SetEnvironmentVariable('PGPASSWORD','...','Machine')
+   ```
+
+   Reinicie o serviço do SQL Server Agent para ele reler o ambiente.
+
+3. Rode o script à mão uma vez. A primeira execução traz o histórico em blocos
+   de 20 mil — o teto existe para não estourar o tempo tentando carregar anos de
+   uma vez. Repita até o log parar de avisar que há fila.
+
+**O job**, no SSMS: `SQL Server Agent` → `Jobs` → botão direito → `New Job`.
+
+* **Steps** → `New`: tipo **`Operating system (CmdExec)`**, comando
+
+  ```
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "<caminho>\replicar-catracas.ps1"
+  ```
+
+  Use `CmdExec`, não o tipo `PowerShell`: o host de PowerShell do Agent é
+  restrito e costuma falhar ao carregar assemblies externos como o Npgsql.
+
+* **Schedules** → `New`: recorrente, diariamente, **a cada 3 minutos**, das
+  00:00:00 às 23:59:59.
+
+* **Advanced** → marque `Include step output in history`. Sem isso, quando algo
+  falhar o histórico mostra apenas "o passo falhou", sem a mensagem que diz por
+  quê.
+
+A conta de serviço do Agent precisa ler `GAC_MARCACAO` e alcançar a internet na
+porta 5432.
+
+## Por que não mandar direto para a API
+
+O backend tem `/api/v1/catracas/evento` e `/api/v1/catracas/lote`, e o job
+poderia postar neles — sem Npgsql, sem driver nenhum. Não é o caminho
+recomendado por um motivo prático: **no plano free o serviço do Render hiberna
+após ~15 minutos sem acesso**, e a primeira chamada depois disso leva perto de um
+minuto ou falha por timeout. Uma passagem perdida assim não volta — não fica
+registro em lugar nenhum.
+
+Gravando no Postgres, o dado está guardado independente de o backend estar de pé;
+o painel lê quando acordar. Com o plano pago, sem hibernação, o envio direto
+passa a ser alternativa razoável — e os dois convivem bem: a API para o tempo
+real, a replicação como rede de segurança.
 
 ## Uma observação sobre o dado
 
