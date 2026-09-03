@@ -55,7 +55,7 @@ async def presentes_agora(momento: Optional[datetime] = None) -> List[Dict[str, 
                    p.tipo_codigo, p.curso, p.turma_nome
               from ultima u
               left join pessoa p
-                     on upper(p.identificador) = upper(trim(u.matricula))
+                     on p.identificador = u.matricula
                     and p.origem = 'JACAD' and p.ativo
              where u.sentido = 'ENTRADA'
              order by u.momento desc
@@ -114,7 +114,7 @@ async def passagens_desde(marca: datetime, limite: int = 5000) -> List[Dict[str,
                    p.identificador
               from catraca.vw_passagem v
               join pessoa p
-                on upper(p.identificador) = upper(trim(v.matricula))
+                on p.identificador = v.matricula
                and p.origem = 'JACAD' and p.ativo
              where v.momento > $1
                and v.sentido in ('ENTRADA', 'SAIDA')
@@ -187,10 +187,10 @@ async def identificadores_presentes(momento: Optional[datetime] = None) -> List[
                    and v.momento between $1 and $2
                  order by v.pes_id, v.momento desc
             )
-            select distinct upper(trim(u.matricula)) as identificador
+            select distinct u.matricula as identificador
               from ultima u
              where u.sentido = 'ENTRADA'
-               and u.matricula is not null and trim(u.matricula) <> ''
+               and u.matricula is not null
             """,
             desde,
             agora,

@@ -49,8 +49,9 @@ comment on column catraca.gac_pessoa.pes_matricula is
 
 -- O cruzamento acontece por matricula, ignorando maiusculas: a origem compara
 -- assim (Latin1_General_CI_AS) e o Postgres nao.
+-- O indice acompanha a forma usada na juncao: sem os zeros a esquerda.
 create index if not exists idx_pes_matricula_normalizada
-    on catraca.gac_pessoa (upper(pes_matricula));
+    on catraca.gac_pessoa (ltrim(trim(pes_matricula), '0'));
 create index if not exists idx_pes_status on catraca.gac_pessoa (pes_status);
 
 alter table catraca.gac_pessoa enable row level security;
@@ -76,7 +77,15 @@ select
     -- gac_pessoa nao estivesse replicada - campus cheio parecendo vazio.
     m.mar_pessoa                                      as pes_id,
     p.pes_nome                                        as nome_na_catraca,
-    p.pes_matricula                                   as matricula,
+    p.pes_matricula                                   as matricula_bruta,
+    -- O cracha guarda o identificador preenchido com zeros a esquerda ate 12
+    -- caracteres: "001010002874" e o RA 1010002874. Comparar sem tirar os zeros
+    -- nao casa nada - foram 0 de 2.306 antes disto, e 1.378 depois.
+    --
+    -- Nem toda matricula e RA: ~115 tem 11 digitos e sao CPF, de funcionarios e
+    -- professores, que o JaCad identifica de outro jeito. Elas ficam sem
+    -- correspondencia, e e o esperado.
+    nullif(ltrim(trim(p.pes_matricula), '0'), '')     as matricula,
     case m.mar_sentido
         when '0' then 'ENTRADA'
         when '1' then 'SAIDA'
