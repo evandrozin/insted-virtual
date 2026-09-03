@@ -124,6 +124,73 @@ $pg = New-Object System.Data.Odbc.OdbcConnection($conexaoPg)
 $pg.Open()
 
 try {
+    # 0. Cadastro de pessoas. Sem ele as marcacoes nao dizem quem passou: elas
+    #    trazem so o id interno da catraca.
+    #
+    #    Aqui nao ha marca dagua. A tabela e pequena (algumas milhares de linhas)
+    #    e as linhas MUDAM - matricula corrigida, pessoa desligada, mudanca de
+    #    setor. Marca dagua por data de alteracao perderia quem foi editado sem
+    #    o campo ser atualizado, e o custo de reenviar tudo e de segundos.
+    #
+    #    Por isso ON CONFLICT DO UPDATE, e nao DO NOTHING como nas marcacoes:
+    #    marcacao e fato consumado e nao muda; cadastro muda.
+    $sqlPessoas = New-Object System.Data.SqlClient.SqlConnection($OrigemSql)
+    $sqlPessoas.Open()
+    try {
+        $qp = $sqlPessoas.CreateCommand()
+        $qp.CommandTimeout = 300
+        # So estas 8 das 160 colunas. Foto, biometria facial, CPF, RG, endereco e
+        # telefone ficam onde estao - ver db/catraca_pessoa.sql.
+        $qp.CommandText = @'
+SELECT PES_ID, PES_NOME, PES_MATRICULA, PES_STATUS,
+       PES_VISITANTE, TIPPES_ID, PES_SETOR, PES_CARGO
+  FROM ACESSOTA.TELESSVR.GAC_PESSOA
+'@
+        $pessoas = New-Object System.Data.DataTable
+        (New-Object System.Data.SqlClient.SqlDataAdapter($qp)).Fill($pessoas) | Out-Null
+    }
+    finally { $sqlPessoas.Close() }
+
+    $camposPessoa = @(
+        @{ nome = 'pes_id';        tipo = 'bigint' },
+        @{ nome = 'pes_nome';      tipo = 'text' },
+        @{ nome = 'pes_matricula'; tipo = 'text' },
+        @{ nome = 'pes_status';    tipo = 'text' },
+        @{ nome = 'pes_visitante'; tipo = 'text' },
+        @{ nome = 'tippes_id';     tipo = 'bigint' },
+        @{ nome = 'pes_setor';     tipo = 'text' },
+        @{ nome = 'pes_cargo';     tipo = 'text' }
+    )
+    $colunasPessoa = $camposPessoa | ForEach-Object { $_.nome }
+    $marcadorPessoa = '(' + (($camposPessoa | ForEach-Object { "cast(? as $($_.tipo))" }) -join ',') + ')'
+    $atualizacao = (($colunasPessoa | Where-Object { $_ -ne 'pes_id' } |
+                     ForEach-Object { "$_ = excluded.$_" }) -join ',') + ',replicado_em = now()'
+
+    $txp = $pg.BeginTransaction()
+    try {
+        for ($inicio = 0; $inicio -lt $pessoas.Rows.Count; $inicio += $LinhasPorLote) {
+            $fim = [Math]::Min($inicio + $LinhasPorLote, $pessoas.Rows.Count) - 1
+            $lote = $inicio..$fim
+
+            $cp = $pg.CreateCommand()
+            $cp.Transaction = $txp
+            $cp.CommandTimeout = 300
+            $cp.CommandText = "insert into catraca.gac_pessoa (" + ($colunasPessoa -join ',') +
+                              ") values " + (($lote | ForEach-Object { $marcadorPessoa }) -join ',') +
+                              " on conflict (pes_id) do update set $atualizacao"
+            foreach ($i in $lote) {
+                foreach ($c in 0..($camposPessoa.Count - 1)) {
+                    $p = $cp.Parameters.Add("q$($i)_$c", [System.Data.Odbc.OdbcType]::VarChar)
+                    $p.Value = ConverterParaTexto $pessoas.Rows[$i][$c]
+                }
+            }
+            [void]$cp.ExecuteNonQuery()
+        }
+        $txp.Commit()
+    }
+    catch { $txp.Rollback(); throw }
+    Registrar ("cadastro: {0} pessoas sincronizadas" -f $pessoas.Rows.Count)
+
     # 1. Marca dagua: o proprio destino responde ate onde ja chegou. Nao ha
     #    estado guardado em arquivo para dessincronizar.
     $cmd = $pg.CreateCommand()
