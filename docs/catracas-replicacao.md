@@ -150,3 +150,51 @@ por onde. O cadastro de alunos já está no Supabase, então não é uma mudanç
 natureza, mas circulação é mais sensível que matrícula. A tabela está com RLS
 habilitada e sem política, o que bloqueia leitura pela API REST gerada; o acesso
 é só pela conexão direta do backend.
+
+## O que os campos significam
+
+Levantado por medição sobre 14.936 marcações reais de 19/08 a 02/09/2026 — o
+fornecedor não documentou nada disso.
+
+### `MAR_SENTIDO`: 0 é entrada, 1 é saída, 2 é recusa
+
+O `2` não é direção: **todas** as 1.745 ocorrências dele têm
+`MAR_STATUSBASICO = '0'`, ou seja, passagem negada.
+
+Entre `0` e `1`, o que decide são dois padrões que não deixam dúvida:
+
+| | 1º evento do dia | último do dia |
+|---|---|---|
+| `0` | **5.919** | 2.372 |
+| `1` | 685 | **4.232** |
+
+E a distribuição por hora desenha o campus: `0` explode às 18h (3.217) e 19h,
+quando o noturno chega, e às 7h para o matutino; `1` concentra-se às 20h e 21h
+(1.927), quando as aulas terminam.
+
+### `MAR_STATUSBASICO` é o filtro de passagem válida
+
+`'1'` autorizado (13.096), `'0'` negado (1.840). Corresponde exatamente a
+`MAR_STATUS = '01'`; os demais códigos — `20`, `22`, `86`, `46`, `45` — são
+variedades de recusa. **Contar sem filtrar por `MAR_STATUSBASICO = '1'` colocaria
+no campus quem a catraca barrou.**
+
+### `MAR_CRACHA` está vazio: a chave é `MAR_PESSOA`
+
+Só dois valores distintos em 14.936 linhas: 11.864 em branco e 3.072 com
+`000000000000`. Este sistema não usa o campo.
+
+Quem identifica é `MAR_PESSOA`, preenchido em 14.258 linhas, com **1.606 pessoas
+distintas** na faixa 1..2277 — próximo dos 1.591 do nosso cadastro (1.505 alunos
++ 86 professores). É um id interno do controle de acesso, não o RA: falta a
+tabela de pessoas do `ACESSOTA` para fazer o de-para.
+
+### `MAR_FUNCAO`, `MAR_TIPO` e `MAR_ORIGEM` não servem para nada aqui
+
+Valor único em toda a base (`-1`, `0` e `0`). Não distinguem coisa alguma.
+
+### Terminais
+
+Cinco, com volumes bem distintos: `3` (6.551), `2` (3.696), `1` (2.732),
+`5` (1.016) e `4` (941). Ainda falta saber qual id corresponde a qual catraca
+física — a maquete posiciona cinco, e hoje é estimativa.
