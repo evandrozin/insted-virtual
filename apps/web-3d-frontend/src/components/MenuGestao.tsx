@@ -1,11 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useSessao } from '../hooks/useSessao';
 
-export type Painel = 'SALAS' | 'PESSOAS' | 'CONFIGURACAO';
+export type Painel = 'SALAS' | 'PESSOAS' | 'PRESENTES' | 'CONFIGURACAO';
 
 const ITENS: Array<{ id: Painel; rotulo: string; descricao: string }> = [
   { id: 'SALAS', rotulo: 'Salas', descricao: 'Prédio, andar, capacidade e geometria' },
-  { id: 'PESSOAS', rotulo: 'Pessoas', descricao: 'Alunos, professores e quem está dentro' },
+  { id: 'PESSOAS', rotulo: 'Pessoas', descricao: 'Alunos, professores e funcionários' },
+  { id: 'PRESENTES', rotulo: 'Na instituição agora', descricao: 'Quem passou pela catraca e não saiu' },
   { id: 'CONFIGURACAO', rotulo: 'Configuração', descricao: 'Integrações, fuso e regras' },
 ];
 

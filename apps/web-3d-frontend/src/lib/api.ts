@@ -14,6 +14,7 @@ import type {
   RespostaCadastro,
   SalaEntrada,
   Sessao,
+  Presentes,
 } from './types';
 
 const BASE = import.meta.env.VITE_API_URL ?? '/api/v1';
@@ -158,6 +159,8 @@ export const sincronizarPessoas = (token: string) =>
   }>(
     'POST', '/pessoas/sincronizar', undefined, token,
   );
+
+export const buscarPresentes = () => get<Presentes>('/catracas/presentes');
 
 export const buscarParametros = () =>
   get<{ parametros: Parametro[] }>('/config/parametros');

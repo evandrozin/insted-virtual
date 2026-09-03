@@ -3,6 +3,7 @@ import { Canvas3D } from './components/Canvas3D';
 import { CadastroSalas } from './components/CadastroSalas';
 import { Configuracao } from './components/Configuracao';
 import { Pessoas } from './components/Pessoas';
+import { Presentes } from './components/Presentes';
 import type { Painel } from './components/MenuGestao';
 import { FloorMap } from './components/FloorMap';
 import { ControlPanel, EventTicker, Header, RoomDrawer } from './components/ControlPanel';
@@ -134,6 +135,7 @@ export default function App() {
       <RoomDrawer />
       {painel === 'SALAS' && <CadastroSalas aoFechar={() => setPainel(null)} />}
       {painel === 'PESSOAS' && <Pessoas aoFechar={() => setPainel(null)} />}
+      {painel === 'PRESENTES' && <Presentes aoFechar={() => setPainel(null)} />}
       {painel === 'CONFIGURACAO' && <Configuracao aoFechar={() => setPainel(null)} />}
     </div>
   );

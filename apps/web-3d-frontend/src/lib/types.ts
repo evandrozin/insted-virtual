@@ -400,3 +400,29 @@ export interface Parametro {
   origem: 'banco' | 'ambiente';
   exige_reinicio: boolean;
 }
+
+/** Quem esta na instituicao agora, segundo as catracas. */
+export interface PresenteNoCampus {
+  pes_id: number;
+  identificador: string | null;
+  nome: string;
+  tipo: string | null;
+  curso: string | null;
+  turma: string | null;
+  desde: string;
+  terminal: number | null;
+  /** Falso quando a catraca conhece a pessoa e o cadastro academico nao. */
+  identificado: boolean;
+}
+
+export interface Presentes {
+  total: number;
+  identificados: number;
+  por_tipo: Record<string, number>;
+  janela_horas: number;
+  momento: string;
+  ultima_marcacao: string | null;
+  /** Minutos desde a ultima passagem replicada. Alto = job possivelmente parado. */
+  atraso_replicacao_min: number | null;
+  pessoas?: PresenteNoCampus[];
+}

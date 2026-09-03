@@ -16,6 +16,7 @@ from app.core.config import settings
 from app.data import pessoa_repository as pessoas
 from app.api.v1.cadastro import requer_edicao, usuario_atual
 from app.services.campus_state import estado
+from app.services import presenca_campus
 from app.services.store import obter_store
 
 router = APIRouter(tags=["configuracao"])
@@ -201,7 +202,8 @@ async def listar(
     resultado = await pessoas.listar_pessoas(tipo, q, limite, offset)
 
     # Quem esta no predio agora, cruzando com o conjunto do estado partilhado.
-    no_campus = await obter_store().alunos_no_campus()
+    no_campus, _fonte = await presenca_campus.identificadores_no_campus()
+    no_campus = set(no_campus)
     for p in resultado["pessoas"]:
         p["no_campus"] = p["identificador"] in no_campus
 
@@ -213,13 +215,16 @@ async def listar(
 async def resumo() -> dict:
     """Quantos de cada tipo, e quantos estao no predio agora."""
     _exige_banco()
-    no_campus = sorted(await obter_store().alunos_no_campus())
-    tipos = await pessoas.resumo_por_tipo(no_campus)
+    no_campus, fonte = await presenca_campus.identificadores_no_campus()
+    tipos = await pessoas.resumo_por_tipo(sorted(no_campus))
 
     reconhecidos = sum(t["no_campus"] for t in tipos)
     return {
         "tipos": tipos,
         "no_campus_agora": len(no_campus),
+        # De onde veio o numero. Sem isso ninguem sabe se esta olhando o campus
+        # ou o simulador.
+        "fonte": fonte,
         # Passagem cujo identificador nao esta no cadastro: cracha de alguem
         # que o JACAD nao conhece, ou sync pendente.
         "sem_cadastro": len(no_campus) - reconhecidos,

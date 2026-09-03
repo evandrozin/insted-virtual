@@ -43,6 +43,51 @@ async def receber_lote(eventos: List[EventoCatraca]) -> dict:
     return {"recebidos": len(eventos), "processados": processados}
 
 
+@router.get("/catracas/presentes")
+async def presentes(detalhado: bool = True) -> dict:
+    """Quem esta na instituicao agora, segundo as catracas.
+
+    Vem do espelho replicado, nao do motor de presenca: aqui e circulacao no
+    predio - inclusive de quem nao tem aula agora - e nao ocupacao de sala.
+    """
+    from app.core.config import settings
+
+    if not settings.DATABASE_URL:
+        raise HTTPException(
+            503, "Sem DATABASE_URL: a leitura das catracas exige o banco."
+        )
+
+    from app.data import catraca_repository as repo
+
+    if not await repo.disponivel():
+        raise HTTPException(
+            503,
+            "Nenhuma marcacao replicada ainda. Verifique o job de replicacao "
+            "no SQL Server (ver docs/catracas-replicacao.md).",
+        )
+
+    agora = clock.agora()
+    resumo = await repo.resumo_presenca(agora)
+    ultima = await repo.ultima_marcacao()
+
+    # Replicacao parada e campus vazio dao a mesma contagem: zero. A diferenca
+    # so aparece olhando quando foi a ultima marcacao a chegar - por isso ela
+    # sai junto, e nao num endpoint de diagnostico que ninguem consulta.
+    atraso_min = None
+    if ultima:
+        atraso_min = max(0, int((agora - ultima).total_seconds() // 60))
+
+    corpo = {
+        **resumo,
+        "momento": agora.isoformat(),
+        "ultima_marcacao": ultima.isoformat() if ultima else None,
+        "atraso_replicacao_min": atraso_min,
+    }
+    if detalhado:
+        corpo["pessoas"] = await repo.presentes_agora(agora)
+    return corpo
+
+
 @router.get("/catracas")
 async def listar_catracas() -> dict:
     store = obter_store()

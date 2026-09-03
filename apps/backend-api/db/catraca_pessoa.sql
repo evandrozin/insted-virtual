@@ -71,7 +71,10 @@ select
     m.mar_id,
     m.mar_datahora                                    as momento,
     m.mar_terminal                                    as terminal,
-    p.pes_id,
+    -- Da marcacao, nao do join: a pessoa e identificada na propria passagem, e
+    -- tirar isso do cadastro faria a contagem de presentes zerar enquanto
+    -- gac_pessoa nao estivesse replicada - campus cheio parecendo vazio.
+    m.mar_pessoa                                      as pes_id,
     p.pes_nome                                        as nome_na_catraca,
     p.pes_matricula                                   as matricula,
     case m.mar_sentido
