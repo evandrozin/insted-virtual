@@ -54,15 +54,43 @@ $RecuoMinutos = 10
 $MaxPorExecucao = 20000
 
 # Linhas por INSERT. Cada comando e uma ida e volta ate o Supabase; uma por linha
-# levaria horas na carga inicial. Com 200, os 12 campos dao 2.400 parametros por
-# comando - bem abaixo do limite de 65.535 do protocolo.
-$LinhasPorLote = 200
+# levaria horas na carga inicial.
+#
+# 50 e nao 200: o protocolo do Postgres aceita 65.535 parametros, mas o psqlODBC
+# nao chega la. Com 200 linhas (2.400 parametros) ele trunca a lista de tipos que
+# monta internamente e o servidor recebe 'timestam' em vez de 'timestamp'. Com 50
+# sao 600 parametros, dentro do que o driver aguenta.
+$LinhasPorLote = 50
 
-$Colunas = @(
-    'mar_id','mar_terminal','mar_pessoa','mar_datahora','mar_funcao',
-    'mar_status','mar_statusbasico','mar_cracha','mar_sentido',
-    'mar_tipo','mar_origem','mar_datahorainc'
+# Coluna e o tipo para o qual o valor e convertido no destino.
+#
+# Todo parametro vai como texto, com cast explicito no SQL. Parece rodeio, mas
+# tira do driver a tarefa de mapear tipo - que e justamente onde ele falhava - e
+# de paso elimina a conversao de data dependente de locale: a formatacao ISO e
+# feita aqui, nao pelo ODBC.
+$Campos = @(
+    @{ nome = 'mar_id';           tipo = 'uuid' },
+    @{ nome = 'mar_terminal';     tipo = 'bigint' },
+    @{ nome = 'mar_pessoa';       tipo = 'bigint' },
+    @{ nome = 'mar_datahora';     tipo = 'timestamp' },
+    @{ nome = 'mar_funcao';       tipo = 'bigint' },
+    @{ nome = 'mar_status';       tipo = 'text' },
+    @{ nome = 'mar_statusbasico'; tipo = 'text' },
+    @{ nome = 'mar_cracha';       tipo = 'text' },
+    @{ nome = 'mar_sentido';      tipo = 'text' },
+    @{ nome = 'mar_tipo';         tipo = 'text' },
+    @{ nome = 'mar_origem';       tipo = 'text' },
+    @{ nome = 'mar_datahorainc';  tipo = 'timestamp' }
 )
+$Colunas = $Campos | ForEach-Object { $_.nome }
+
+function ConverterParaTexto($valor) {
+    # Texto que o Postgres consegue converter, ou DBNull.
+    if ($null -eq $valor -or $valor -is [System.DBNull]) { return [DBNull]::Value }
+    if ($valor -is [datetime]) { return $valor.ToString('yyyy-MM-dd HH:mm:ss.fff') }
+    if ($valor -is [guid])     { return $valor.ToString() }
+    return [System.Convert]::ToString($valor, [System.Globalization.CultureInfo]::InvariantCulture)
+}
 
 # --- pre-requisitos ---------------------------------------------------------
 $driver = (Get-OdbcDriver -Platform 64-bit -ErrorAction SilentlyContinue |
@@ -80,9 +108,12 @@ foreach ($v in 'PGHOST','PGUSER','PGPASSWORD') {
     }
 }
 
+# UseServerSidePrepare=0: com prepare no servidor o driver monta uma lista de
+# tipos por parametro, e e ai que ele trunca em comandos grandes. Sem isso o
+# comando vai inteiro, com os casts explicitos fazendo o trabalho.
 $conexaoPg = "Driver={$driver};Server=$($env:PGHOST);Port=$DestinoPorta;" +
              "Database=$DestinoBase;Uid=$($env:PGUSER);Pwd=$($env:PGPASSWORD);" +
-             "SSLmode=require;"
+             "SSLmode=require;UseServerSidePrepare=0;"
 
 function Registrar($mensagem) {
     Write-Output ("[{0:yyyy-MM-dd HH:mm:ss}] {1}" -f (Get-Date), $mensagem)
@@ -142,7 +173,11 @@ SELECT TOP ($MaxPorExecucao)
             $fim = [Math]::Min($inicio + $LinhasPorLote, $tabela.Rows.Count) - 1
             $lote = $inicio..$fim
 
-            $grupos = $lote | ForEach-Object { '(' + (($Colunas | ForEach-Object { '?' }) -join ',') + ')' }
+            # Cada valor entra como texto com cast explicito - ver o comentario
+            # em $Campos sobre por que nao se deixa o driver mapear os tipos.
+            $marcadores = '(' + (($Campos | ForEach-Object { "cast(? as $($_.tipo))" }) -join ',') + ')'
+            $grupos = $lote | ForEach-Object { $marcadores }
+
             $ins = $pg.CreateCommand()
             $ins.Transaction = $tx
             $ins.CommandTimeout = 300
@@ -151,12 +186,11 @@ SELECT TOP ($MaxPorExecucao)
                                " on conflict (mar_id) do nothing"
 
             foreach ($i in $lote) {
-                foreach ($c in 0..($Colunas.Count - 1)) {
-                    $valor = $tabela.Rows[$i][$c]
-                    # O ODBC nao aceita DBNull vindo do DataTable direto em
-                    # parametro posicional; converter aqui evita erro de tipo.
-                    if ($valor -is [System.DBNull]) { $valor = [DBNull]::Value }
-                    [void]$ins.Parameters.AddWithValue("p$($i)_$c", $valor)
+                foreach ($c in 0..($Campos.Count - 1)) {
+                    # O ODBC ignora o nome e usa a ordem; o nome so aparece em
+                    # mensagem de erro.
+                    $p = $ins.Parameters.Add("p$($i)_$c", [System.Data.Odbc.OdbcType]::VarChar)
+                    $p.Value = ConverterParaTexto $tabela.Rows[$i][$c]
                 }
             }
             $gravadas += $ins.ExecuteNonQuery()
