@@ -74,6 +74,35 @@ async def _loop_reconciliacao() -> None:
         await asyncio.sleep(parametros.tick_dashboard_s())
 
 
+async def _loop_catracas() -> None:
+    """Traz as passagens replicadas para dentro do motor de presenca.
+
+    Substitui o simulador quando ha catraca de verdade. A cadencia acompanha o
+    job de replicacao: adiantar nao traz nada, porque o dado so aparece aqui
+    depois que o SQL Server o empurra.
+    """
+    from app.services.catraca_feed import alimentador
+
+    while True:
+        try:
+            resumo = await alimentador.ciclo()
+            if resumo["passagens"]:
+                print(f"[catracas] {resumo['passagens']} passagem(ns) processada(s)")
+                await difundir({
+                    "tipo": "DASHBOARD_TICK",
+                    "servidor_em": clock.agora(),
+                    "dashboard": await servico_dashboard.snapshot(),
+                    **({"deltas": resumo["deltas"]} if resumo["deltas"] else {}),
+                })
+        except asyncio.CancelledError:
+            raise
+        except Exception as erro:
+            alimentador.erro = f"{type(erro).__name__}: {erro}"
+            print(f"[catracas] falha no ciclo: {alimentador.erro}")
+
+        await asyncio.sleep(parametros.tick_catracas_s())
+
+
 async def _loop_sync_jacad() -> None:
     while True:
         await asyncio.sleep(parametros.jacad_sync_interval_s())
@@ -154,6 +183,13 @@ async def lifespan(app: FastAPI):
     if _falhas_boot:
         print(f"[boot] subiu com {len(_falhas_boot)} etapa(s) com falha; "
               f"veja /health")
+
+    # As catracas alimentam o motor quando o simulador esta desligado e ha
+    # espelho replicado. Ligar os dois juntos misturaria passagem real com
+    # inventada no mesmo painel.
+    if not settings.SIMULADOR_ATIVO and settings.DATABASE_URL:
+        _tarefas.append(asyncio.create_task(_loop_catracas()))
+        print("[boot] passagens vindas das catracas replicadas")
 
     if settings.LOOP_INTERNO:
         _tarefas.append(asyncio.create_task(_loop_reconciliacao()))

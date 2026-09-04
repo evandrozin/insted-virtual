@@ -130,5 +130,14 @@ def simulador_ativo() -> bool:
     return bool(obter("SIMULADOR_ATIVO"))
 
 
+def tick_catracas_s() -> int:
+    """Intervalo de leitura do espelho das catracas.
+
+    Nao adianta ser menor que o job de replicacao no SQL Server: o dado so
+    aparece aqui depois que ele empurra.
+    """
+    return int(obter("TICK_CATRACAS_S") or 30)
+
+
 def tick_dashboard_s() -> int:
     return int(obter("TICK_DASHBOARD_S"))
