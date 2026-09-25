@@ -51,7 +51,7 @@ async def presentes_agora(momento: Optional[datetime] = None) -> List[Dict[str, 
             """
             with ultima as (
                 select distinct on (v.pes_id)
-                       v.pes_id, v.momento, v.sentido, v.matricula,
+                       v.pes_id, v.momento, v.sentido, v.matricula, v.cracha,
                        v.nome_na_catraca, v.terminal
                   from catraca.vw_passagem v
                  where v.pes_id is not null
@@ -64,7 +64,7 @@ async def presentes_agora(momento: Optional[datetime] = None) -> List[Dict[str, 
                    p.tipo_codigo, p.curso, p.turma_nome
               from ultima u
               left join pessoa p
-                     on p.identificador = u.matricula
+                     on catraca.chave12(p.identificador) = u.cracha
                     and p.origem = 'JACAD' and p.ativo
              where u.sentido = 'ENTRADA'
              order by u.momento desc
@@ -123,7 +123,7 @@ async def passagens_desde(marca: datetime, limite: int = 5000) -> List[Dict[str,
                    p.identificador
               from catraca.vw_passagem v
               join pessoa p
-                on p.identificador = v.matricula
+                on catraca.chave12(p.identificador) = v.cracha
                and p.origem = 'JACAD' and p.ativo
              where v.momento > $1
                and v.sentido in ('ENTRADA', 'SAIDA')
@@ -190,7 +190,7 @@ async def identificadores_presentes(momento: Optional[datetime] = None) -> List[
             """
             with ultima as (
                 select distinct on (v.pes_id)
-                       v.pes_id, v.sentido, v.matricula
+                       v.pes_id, v.sentido, v.matricula, v.cracha
                   from catraca.vw_passagem v
                  where v.pes_id is not null
                    and v.momento between $1 and $2

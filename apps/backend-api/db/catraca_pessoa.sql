@@ -66,7 +66,38 @@ alter table catraca.gac_pessoa enable row level security;
 --   mar_sentido: '0' entrada, '1' saida, '2' recusa. Confirmado pelo padrao do
 --   dia - '0' foi o primeiro evento 5.919 vezes contra 685, e '1' o ultimo
 --   4.232 vezes; os picos batem com a chegada do noturno as 18h e a saida as 21h.
-create or replace view catraca.vw_passagem
+-- Chave de casamento entre o cracha e o cadastro academico.
+--
+-- O cracha guarda o identificador preenchido com zeros a esquerda ate 12
+-- caracteres: "001010002874" e o RA 1010002874, e "012345678901" e um CPF que
+-- comeca com zero.
+--
+-- A versao anterior tirava os zeros a esquerda (`ltrim(...,'0')`). Funcionava
+-- para RA, mas e destrutivo: CPF que comeca com zero - e ha muitos - perdia o
+-- primeiro digito e nunca casaria com o CPF vindo do ERP. Preencher ate 12 nos
+-- dois lados resolve sem descartar nada.
+--
+-- `right(...)` antes do lpad porque lpad TRUNCA pela esquerda quando o valor e
+-- maior que o tamanho pedido: sem isso um valor de 13 digitos viraria os 12
+-- primeiros, e nao os 12 ultimos, que e o que preserva o numero.
+create or replace function catraca.chave12(valor text)
+returns text
+language sql
+immutable
+parallel safe
+as $$
+    select nullif(
+        lpad(right(regexp_replace(coalesce(valor, ''), '\D', '', 'g'), 12), 12, '0'),
+        '000000000000'
+    )
+$$;
+
+-- Drop antes do create: `create or replace view` so aceita colunas novas no
+-- FIM da lista, e `cracha` entra ao lado de `matricula`, onde se entende o que
+-- ela e. Nenhum objeto depende desta view - o backend consulta direto.
+drop view if exists catraca.vw_passagem;
+
+create view catraca.vw_passagem
 with (security_invoker = on) as
 select
     m.mar_id,
@@ -78,14 +109,10 @@ select
     m.mar_pessoa                                      as pes_id,
     p.pes_nome                                        as nome_na_catraca,
     p.pes_matricula                                   as matricula_bruta,
-    -- O cracha guarda o identificador preenchido com zeros a esquerda ate 12
-    -- caracteres: "001010002874" e o RA 1010002874. Comparar sem tirar os zeros
-    -- nao casa nada - foram 0 de 2.306 antes disto, e 1.378 depois.
-    --
-    -- Nem toda matricula e RA: ~115 tem 11 digitos e sao CPF, de funcionarios e
-    -- professores, que o JaCad identifica de outro jeito. Elas ficam sem
-    -- correspondencia, e e o esperado.
-    nullif(ltrim(trim(p.pes_matricula), '0'), '')     as matricula,
+    -- Cru, para exibir e conferir.
+    nullif(trim(p.pes_matricula), '')                 as matricula,
+    -- Chave de casamento, sempre 12 posicoes - ver catraca.chave12.
+    catraca.chave12(p.pes_matricula)                  as cracha,
     case m.mar_sentido
         when '0' then 'ENTRADA'
         when '1' then 'SAIDA'
