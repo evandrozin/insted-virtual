@@ -68,6 +68,7 @@ class JacadRestClient:
         self._unidade = unidade_fisica
         self._id_org = id_org
         self._cache_turmas: List[dict] = []
+        self._cache_documentos: Optional[Dict[str, str]] = None
         self._cache_matriculas: List[dict] = []
         self._cache_disciplinas: List[dict] = []
         self._turmas_sinteticas: List[TurmaModel] = []
@@ -179,12 +180,63 @@ class JacadRestClient:
             ]
         return self._cache_matriculas
 
+    # Nomes plausiveis do CPF no cadastro. O contrato desta rota nao esta
+    # documentado, e sondar a API nao responde (todo /api** devolve o mesmo
+    # 401). Em vez de fixar um chute, aceita-se o primeiro que aparecer - e a
+    # chave encontrada vai para o log, para o mapeamento virar evidencia.
+    _CAMPOS_CPF = ("cpf", "numeroCpf", "cpfAluno", "documento", "nrCpf")
+    _CAMPOS_RA = ("ra", "registroAcademico", "matricula")
+
+    def _documentos(self) -> Dict[str, str]:
+        """RA -> CPF, a partir do cadastro de alunos.
+
+        Vem de /api/v2/academico/alunos, e nao das matriculas: matricula diz
+        quem esta ativo, cadastro diz quem a pessoa e - e o CPF so existe la.
+
+        Falhar aqui nao derruba a sincronizacao. Sem CPF o cruzamento com a
+        catraca cai no RA, que e como funcionava antes; derrubar a carga inteira
+        por causa disso trocaria um reconhecimento parcial por nenhum.
+        """
+        if self._cache_documentos is not None:
+            return self._cache_documentos
+
+        mapa: Dict[str, str] = {}
+        try:
+            cadastro = self._todos("/api/v2/academico/alunos")
+        except Exception as erro:
+            print(f"[jacad] cadastro de alunos indisponivel ({erro}); "
+                  f"cruzamento seguira pelo RA")
+            self._cache_documentos = mapa
+            return mapa
+
+        campo_cpf = campo_ra = None
+        for item in cadastro:
+            if campo_cpf is None:
+                campo_cpf = next((c for c in self._CAMPOS_CPF if item.get(c)), None)
+                campo_ra = next((c for c in self._CAMPOS_RA if item.get(c)), None)
+                if campo_cpf and campo_ra:
+                    print(f"[jacad] cadastro: CPF em '{campo_cpf}', RA em '{campo_ra}'")
+                elif cadastro:
+                    # Uma vez so, e o bastante para alguem dizer o nome certo.
+                    print(f"[jacad] nao achei CPF/RA no cadastro. Campos "
+                          f"disponiveis: {sorted(item.keys())}")
+                    break
+            ra = str(item.get(campo_ra) or "").strip()
+            cpf = "".join(ch for ch in str(item.get(campo_cpf) or "") if ch.isdigit())
+            if ra and cpf:
+                mapa[ra] = cpf
+
+        print(f"[jacad] CPF obtido para {len(mapa)} de {len(cadastro)} alunos")
+        self._cache_documentos = mapa
+        return mapa
+
     def listar_alunos(self) -> List[AlunoModel]:
         """Alunos com matricula ATIVA no periodo corrente.
 
         /alunos traz o cadastro historico inteiro sem dizer quem esta ativo;
-        quem responde isso e /matriculas.
+        quem responde isso e /matriculas. O cadastro entra so pelo CPF.
         """
+        documentos = self._documentos()
         alunos: Dict[str, AlunoModel] = {}
         for m in self._matriculas():
             ra = str(m.get("ra") or "").strip()
@@ -197,6 +249,7 @@ class JacadRestClient:
                 turma_id=str(m.get("idTurma") or "SEM-TURMA"),
                 periodo=1,
                 situacao="ATIVO",
+                documento=documentos.get(ra),
             )
         return list(alunos.values())
 

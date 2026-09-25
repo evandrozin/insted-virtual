@@ -208,7 +208,7 @@ async def sincronizar_do_jacad(por_tipo: Dict[str, List[dict]]) -> Dict[str, Any
                         r["identificador"], r["nome"], tipo, r.get("email"),
                         r.get("curso"), r.get("turma_id"), r.get("turma_nome"),
                         r.get("periodo"), r.get("setor"), r.get("cargo"),
-                        r.get("situacao", "ATIVO"),
+                        r.get("situacao", "ATIVO"), r.get("documento"),
                     )
                     for r in pessoas
                 ]
@@ -216,9 +216,10 @@ async def sincronizar_do_jacad(por_tipo: Dict[str, List[dict]]) -> Dict[str, Any
                     """
                     insert into pessoa (identificador, nome, tipo_codigo, email,
                                         curso, turma_id, turma_nome, periodo,
-                                        setor, cargo, situacao, origem, ativo,
-                                        sincronizado_em)
-                    values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'JACAD',true,now())
+                                        setor, cargo, situacao, documento,
+                                        origem, ativo, sincronizado_em)
+                    values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,
+                            'JACAD',true,now())
                     on conflict (identificador) do update set
                         nome = excluded.nome,
                         tipo_codigo = excluded.tipo_codigo,
@@ -230,6 +231,10 @@ async def sincronizar_do_jacad(por_tipo: Dict[str, List[dict]]) -> Dict[str, Any
                         setor = excluded.setor,
                         cargo = excluded.cargo,
                         situacao = excluded.situacao,
+                        -- coalesce: sincronizacao que venha sem CPF - cadastro
+                        -- do ERP fora do ar, por exemplo - nao apaga o que ja
+                        -- estava gravado e funcionando.
+                        documento = coalesce(excluded.documento, pessoa.documento),
                         ativo = true,
                         sincronizado_em = now(),
                         atualizado_em = now()

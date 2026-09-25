@@ -282,6 +282,49 @@ cofre do Windows. O custo é que **troca de senha quebra a tarefa em silêncio**
 ela passa a falhar a cada ciclo, e só o log mostra. Por isso a primeira opção é
 preferível.
 
+## A chave de casamento: CPF, preenchido até 12 posições
+
+O `pes_matricula` do crachá passou a ser cadastrado com **CPF**, não mais com o
+RA. O cruzamento com o cadastro acadêmico acompanha: compara o CPF do JaCad,
+vindo de `GET /api/v2/academico/alunos`, e cai no RA quando não há CPF.
+
+Os dois lados são normalizados por `catraca.chave12()`: só dígitos, preenchido
+com zeros à esquerda até 12 posições.
+
+**A regra anterior tirava os zeros à esquerda, e isso era destrutivo.** Servia
+para RA, mas CPF que começa com zero perderia o primeiro dígito e nunca
+casaria. Preencher não descarta nada, e é como o crachá já guarda o número:
+`001010002874` é o RA 1010002874; `001234567890` é o CPF 01234567890.
+
+O `right()` antes do `lpad` não é enfeite: `lpad` **trunca pela esquerda**
+quando o valor excede o tamanho, então um valor de 13 dígitos viraria os 12
+primeiros em vez dos 12 últimos.
+
+### Por que o casamento usa LATERAL e não OR
+
+A forma óbvia — `on (cpf = crachá or ra = crachá)` — não usa índice nenhum. O
+planejador vira um nested loop com filtro, avaliando `chave12` nos dois lados
+de cada par. Medido em produção, para **um** dia: 3.346.736 linhas descartadas,
+**8.892 ms**.
+
+Com `join lateral` de dois `select` unidos por `union all`, cada ramo é uma
+igualdade sobre expressão indexada: **25 ms**, 355× mais rápido. O alimentador
+lê a cada 30 segundos, então a diferença é entre funcionar e não funcionar.
+
+O `limit 1` do lateral resolve também um problema de correção: um crachá pode
+casar pelo CPF de uma pessoa e pelo RA de outra, e a passagem viraria dois
+eventos. A prioridade fica com o CPF, que é o cadastro novo.
+
+### Estado da migração
+
+Medido em 25/09/2026, sobre os 2.434 crachás replicados, validando os dígitos
+verificadores: **398 são CPF válido, 2.032 não são** — ainda RA. Por isso o
+casamento aceita as duas chaves em vez de trocar de uma vez: trocar deixaria
+84% das pessoas sem reconhecimento enquanto o recadastramento não terminasse.
+
+Quando ele terminar, dá para simplificar para CPF apenas — e a consulta acima
+diz quando: é quando `cpf_valido` alcançar o total.
+
 ## Por que não mandar direto para a API
 
 O backend tem `/api/v1/catracas/evento` e `/api/v1/catracas/lote`, e o job

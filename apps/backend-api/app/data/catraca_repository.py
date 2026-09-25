@@ -63,9 +63,27 @@ async def presentes_agora(momento: Optional[datetime] = None) -> List[Dict[str, 
                    p.identificador, p.nome as nome_cadastro,
                    p.tipo_codigo, p.curso, p.turma_nome
               from ultima u
-              left join pessoa p
-                     on catraca.chave12(p.identificador) = u.cracha
-                    and p.origem = 'JACAD' and p.ativo
+              -- Lateral com limit 1, e nao um join direto: o cracha pode
+              -- casar pelo CPF de uma pessoa e pelo RA de outra. A chance e
+              -- remota - sao 12 digitos identicos -, mas o efeito seria a
+              -- mesma passagem aparecer duas vezes na lista de presentes.
+              -- O CPF tem precedencia: e o que o cadastro novo das catracas usa.
+              left join lateral (
+                  select pe.identificador, pe.nome, pe.tipo_codigo,
+                         pe.curso, pe.turma_nome, 1 as prio
+                    from pessoa pe
+                   where pe.documento is not null
+                     and catraca.chave12(pe.documento) = u.cracha
+                     and pe.origem = 'JACAD' and pe.ativo
+                  union all
+                  select pe.identificador, pe.nome, pe.tipo_codigo,
+                         pe.curso, pe.turma_nome, 2
+                    from pessoa pe
+                   where catraca.chave12(pe.identificador) = u.cracha
+                     and pe.origem = 'JACAD' and pe.ativo
+                   order by prio
+                   limit 1
+              ) p on true
              where u.sentido = 'ENTRADA'
              order by u.momento desc
             """,
@@ -119,12 +137,33 @@ async def passagens_desde(marca: datetime, limite: int = 5000) -> List[Dict[str,
     try:
         linhas = await conexao.fetch(
             """
-            select v.mar_id, v.momento, v.sentido, v.terminal,
-                   p.identificador
+            select v.mar_id, v.momento, v.sentido, v.terminal, p.identificador
               from catraca.vw_passagem v
-              join pessoa p
-                on catraca.chave12(p.identificador) = v.cracha
-               and p.origem = 'JACAD' and p.ativo
+              -- Lateral com UNION ALL, e nao `on (cpf = cracha or ra = cracha)`.
+              --
+              -- Com o OR o planejador nao usa indice nenhum: vira nested loop
+              -- com filtro, avaliando chave12 nos dois lados de cada par. Medido
+              -- em producao, para UM dia: 3.346.736 linhas descartadas, 8.892 ms.
+              -- Nesta forma cada ramo e uma igualdade sobre expressao indexada -
+              -- 25 ms, 355x. O alimentador roda a cada 30 s.
+              --
+              -- O limit 1 tambem garante uma pessoa por passagem: o cracha pode
+              -- casar pelo CPF de uma e pelo RA de outra, e a passagem viraria
+              -- dois eventos. `prio` da precedencia ao CPF, que e o cadastro novo.
+              join lateral (
+                  select pe.identificador, 1 as prio
+                    from pessoa pe
+                   where pe.documento is not null
+                     and catraca.chave12(pe.documento) = v.cracha
+                     and pe.origem = 'JACAD' and pe.ativo
+                  union all
+                  select pe.identificador, 2
+                    from pessoa pe
+                   where catraca.chave12(pe.identificador) = v.cracha
+                     and pe.origem = 'JACAD' and pe.ativo
+                   order by prio
+                   limit 1
+              ) p on true
              where v.momento > $1
                and v.sentido in ('ENTRADA', 'SAIDA')
              order by v.momento

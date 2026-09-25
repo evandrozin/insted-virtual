@@ -15,6 +15,11 @@ class AlunoModel(BaseModel):
     periodo: int = 1
     situacao: str = "ATIVO"
     foto_url: Optional[str] = None
+    # CPF, quando o ERP o fornece. Existe por um motivo so: os crachas das
+    # catracas passaram a ser cadastrados com CPF em vez de RA, e sem ele nao
+    # ha como reconhecer quem passou. Opcional porque o mock nao inventa CPF e
+    # porque o cadastro do ERP nao preenche todo mundo.
+    documento: Optional[str] = None
 
 
 class ProfessorModel(BaseModel):

@@ -103,6 +103,11 @@ comment on column tipo_pessoa.conta_presenca_em_aula is
 create table if not exists pessoa (
     id              integer generated always as identity primary key,
     identificador   text not null unique,
+    -- CPF, quando o ERP o fornece. Os crachas das catracas passaram a ser
+    -- cadastrados com CPF em vez de RA; sem esta coluna a passagem nao tem
+    -- como ser ligada a uma pessoa. Nao e unique: o ERP pode nao preencher, e
+    -- varios nulos conviveriam mal com a restricao.
+    documento       text,
     nome            text not null,
     tipo_codigo     text not null references tipo_pessoa (codigo),
     email           text,

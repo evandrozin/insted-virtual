@@ -31,6 +31,7 @@ def _alunos(
     return [
         {
             "identificador": a.ra,
+            "documento": a.documento,
             "nome": a.nome,
             "curso": a.curso,
             "turma_id": a.turma_id,
