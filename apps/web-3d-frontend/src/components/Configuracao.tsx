@@ -246,7 +246,42 @@ export const Configuracao: React.FC<{ aoFechar: () => void }> = ({ aoFechar }) =
                     <code>{dados.catracas.lote}</code> (reenvio após queda)
                   </dd>
                 </dl>
-                {dados.catracas.modo === 'simulado' && (
+                <h3>
+                E-mail
+                <Selo
+                  ok={dados.email.configurado && !dados.email.erro}
+                  sim={dados.email.erro ? 'falhando' : 'pronto'}
+                  nao={dados.email.configurado ? 'falhando' : 'desligado'}
+                />
+              </h3>
+              <dl>
+                <dt>Servidor</dt>
+                <dd>
+                  {dados.email.servidor
+                    ? `${dados.email.servidor} · ${dados.email.modo}`
+                    : 'não configurado'}
+                </dd>
+                <dt>Remetente</dt>
+                <dd>{dados.email.remetente ?? '—'}</dd>
+                <dt>Último envio</dt>
+                <dd>
+                  {dados.email.erro ? (
+                    <code>{dados.email.erro}</code>
+                  ) : dados.email.enviado_em ? (
+                    dados.email.enviado_em.slice(0, 16).replace('T', ' ')
+                  ) : (
+                    'nenhum nesta instância'
+                  )}
+                </dd>
+              </dl>
+              {dados.email.falta && (
+                <p className="config-nota alerta">
+                  Redefinição de senha por e-mail indisponível: {dados.email.falta}.
+                  O painel esconde o link enquanto isso.
+                </p>
+              )}
+
+              {dados.catracas.modo === 'simulado' && (
                   <p className="config-nota">
                     O simulador está gerando as passagens. Em produção use{' '}
                     <code>SIMULADOR_ATIVO=false</code> e aponte a controladora

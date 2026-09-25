@@ -11,7 +11,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 
-from app.core import clock, parametros
+from app.core import clock, correio, parametros
 from app.core.config import settings
 from app.data import pessoa_repository as pessoas
 from app.api.v1.cadastro import requer_edicao, usuario_atual
@@ -130,6 +130,20 @@ async def integracoes() -> dict:
             # no painel: os dois mostram zero. O erro do ciclo so aparecia no
             # stdout do processo, onde ninguem que use a tela vai olhar.
             "alimentador": await _situacao_alimentador(),
+        },
+        # Envio de e-mail. A resposta do endpoint de redefinicao e neutra de
+        # proposito - nao pode confirmar que a conta existe -, entao sem isto a
+        # falha de envio so existiria no log do processo.
+        "email": {
+            "configurado": correio.configurado(),
+            "falta": correio.diagnostico(),
+            "servidor": (
+                f"{settings.SMTP_HOST}:{settings.SMTP_PORT}"
+                if settings.SMTP_HOST else None
+            ),
+            "remetente": correio.remetente() or None,
+            "modo": "TLS" if settings.SMTP_SSL else "STARTTLS",
+            **correio.ultimo_resultado(),
         },
         "data_hora": {
             "fuso": clock.fuso(),

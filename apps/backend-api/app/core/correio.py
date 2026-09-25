@@ -13,10 +13,25 @@ from __future__ import annotations
 
 import smtplib
 import ssl
+from datetime import datetime, timezone
 from email.message import EmailMessage
 from typing import Optional
 
 from app.core.config import settings
+
+
+# Ultimo resultado de envio, para a tela de Configuracao poder mostrar.
+#
+# A resposta do endpoint publico e neutra de proposito - dizer "nao consegui
+# enviar" confirmaria que a conta existe. Mas quem administra precisa ver a
+# falha em algum lugar, e o log do Render nao e lugar que se consulte no meio
+# de um atendimento.
+_ultimo_erro: Optional[str] = None
+_ultimo_envio: Optional[str] = None
+
+
+def ultimo_resultado() -> dict:
+    return {"erro": _ultimo_erro, "enviado_em": _ultimo_envio}
 
 
 def configurado() -> bool:
@@ -49,21 +64,33 @@ def enviar(destino: str, assunto: str, texto: str) -> None:
             "SMTP nao configurado: defina SMTP_HOST, SMTP_USUARIO e SMTP_SENHA."
         )
 
+    global _ultimo_erro, _ultimo_envio
+
     msg = _montar(destino, assunto, texto)
     contexto = ssl.create_default_context()
 
-    if settings.SMTP_SSL:
-        with smtplib.SMTP_SSL(
-            settings.SMTP_HOST, settings.SMTP_PORT, context=contexto, timeout=20
-        ) as servidor:
-            servidor.login(settings.SMTP_USUARIO, settings.SMTP_SENHA)
-            servidor.send_message(msg)
-        return
+    try:
+        if settings.SMTP_SSL:
+            with smtplib.SMTP_SSL(
+                settings.SMTP_HOST, settings.SMTP_PORT, context=contexto, timeout=20
+            ) as servidor:
+                servidor.login(settings.SMTP_USUARIO, settings.SMTP_SENHA)
+                servidor.send_message(msg)
+        else:
+            with smtplib.SMTP(
+                settings.SMTP_HOST, settings.SMTP_PORT, timeout=20
+            ) as servidor:
+                servidor.starttls(context=contexto)
+                servidor.login(settings.SMTP_USUARIO, settings.SMTP_SENHA)
+                servidor.send_message(msg)
+    except Exception as erro:
+        # Guarda e repassa: quem chamou decide o que responder ao usuario, e a
+        # tela de Configuracao passa a ter o motivo.
+        _ultimo_erro = f"{type(erro).__name__}: {erro}"
+        raise
 
-    with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=20) as servidor:
-        servidor.starttls(context=contexto)
-        servidor.login(settings.SMTP_USUARIO, settings.SMTP_SENHA)
-        servidor.send_message(msg)
+    _ultimo_erro = None
+    _ultimo_envio = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 def texto_codigo(nome: str, codigo: str, validade_min: int) -> str:

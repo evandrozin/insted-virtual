@@ -316,6 +316,18 @@ export interface Integracoes {
       espelho_erro?: string;
     };
   };
+  email: {
+    configurado: boolean;
+    // O que falta para o envio funcionar, ou null se esta pronto.
+    falta: string | null;
+    servidor: string | null;
+    remetente: string | null;
+    modo: string;
+    // Erro do ultimo envio. A resposta do endpoint publico e neutra, entao
+    // este e o unico lugar da interface onde a falha aparece.
+    erro: string | null;
+    enviado_em: string | null;
+  };
   data_hora: {
     fuso: string;
     agora: string;
