@@ -22,6 +22,27 @@ class AlunoModel(BaseModel):
     documento: Optional[str] = None
 
 
+class FuncionarioModel(BaseModel):
+    """Funcionario administrativo vindo do ERP.
+
+    Existe para o painel distinguir quem esta no predio a trabalho de quem
+    esta em aula: aluno ocupa carteira numa turma, funcionario apenas circula.
+    A regra de contar presenca nao mora aqui - fica em tipo_pessoa, na coluna
+    conta_presenca_em_aula, para nao ficar espalhada pelo motor.
+
+    `documento` e o CPF, e e o que importa para o cruzamento: os crachas das
+    catracas sao cadastrados com CPF, e funcionario nao tem RA.
+    """
+
+    matricula: str = Field(..., description="Matricula funcional, ou o CPF quando nao houver")
+    nome: str
+    documento: Optional[str] = None
+    email: Optional[str] = None
+    setor: Optional[str] = None
+    cargo: Optional[str] = None
+    situacao: str = "ATIVO"
+
+
 class ProfessorModel(BaseModel):
     """Docente vindo do ERP.
 

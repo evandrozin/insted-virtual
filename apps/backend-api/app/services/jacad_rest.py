@@ -19,7 +19,7 @@ from datetime import date, datetime, timedelta
 from typing import Any, Dict, Iterable, List, Optional
 
 from app.data.campus_seed import CODIGO_ENSALAMENTO
-from app.models.academico import AlunoModel, AulaModel, ProfessorModel, TurmaModel
+from app.models.academico import AlunoModel, AulaModel, FuncionarioModel, ProfessorModel, TurmaModel
 
 # O ERP nomeia a sala pelo ensalamento ("04A"); a maquete usa o id da planta
 # ("ST_04"). Sem esta traducao o estado descarta toda aula como sala inexistente.
@@ -69,6 +69,7 @@ class JacadRestClient:
         self._id_org = id_org
         self._cache_turmas: List[dict] = []
         self._cache_documentos: Optional[Dict[str, str]] = None
+        self._cache_funcionarios: Optional[List[FuncionarioModel]] = None
         self._cache_matriculas: List[dict] = []
         self._cache_disciplinas: List[dict] = []
         self._turmas_sinteticas: List[TurmaModel] = []
@@ -241,6 +242,88 @@ class JacadRestClient:
         self._cache_documentos = mapa
         return mapa
 
+    # Campos do cadastro de funcionarios. `cpf` e confirmado; os demais nao,
+    # entao sao detectados e o escolhido vai para o log - mesmo criterio usado
+    # no cadastro de alunos.
+    _CAMPOS_NOME = ("nome", "funcionario", "nomeFuncionario", "nomeCompleto")
+    _CAMPOS_MATRICULA = ("matricula", "matriculaFuncional", "idFuncionario", "id")
+    _CAMPOS_SETOR = ("setor", "departamento", "lotacao", "area")
+    _CAMPOS_CARGO = ("cargo", "funcao", "descricaoCargo")
+
+    @staticmethod
+    def _primeiro_campo(itens: List[dict], candidatos: tuple) -> Optional[str]:
+        """Qual dos nomes plausiveis a API realmente usa.
+
+        Olha uma amostra, e nao so o primeiro item: campo opcional pode vir
+        vazio nas primeiras linhas e existir nas seguintes.
+        """
+        return next(
+            (c for c in candidatos if any(i.get(c) for i in itens[:50])), None
+        )
+
+    def listar_funcionarios(self) -> List[FuncionarioModel]:
+        """Funcionarios administrativos, de /basicos/funcionarios.
+
+        Serve para o painel separar quem esta no predio a trabalho de quem
+        esta em aula. Sem isto todo cracha que nao fosse de aluno caia em
+        "identificador nao cadastrado", sem dizer que ha uma pessoa conhecida
+        por tras.
+
+        Falha aqui nao derruba a sincronizacao: alunos e professores continuam
+        espelhados, e os funcionarios voltam no proximo ciclo.
+        """
+        if self._cache_funcionarios is not None:
+            return self._cache_funcionarios
+
+        try:
+            dados = self._todos("/api/v1/basicos/funcionarios")
+        except Exception as erro:
+            print(f"[jacad] funcionarios indisponiveis: {erro}")
+            self._cache_funcionarios = []
+            return []
+
+        if not dados:
+            self._cache_funcionarios = []
+            return []
+
+        campo_nome = self._primeiro_campo(dados, self._CAMPOS_NOME)
+        campo_mat = self._primeiro_campo(dados, self._CAMPOS_MATRICULA)
+        campo_setor = self._primeiro_campo(dados, self._CAMPOS_SETOR)
+        campo_cargo = self._primeiro_campo(dados, self._CAMPOS_CARGO)
+
+        if not campo_nome:
+            print(f"[jacad] nao achei o nome em /basicos/funcionarios. "
+                  f"Campos disponiveis: {sorted(dados[0].keys())}")
+            self._cache_funcionarios = []
+            return []
+
+        funcionarios: List[FuncionarioModel] = []
+        for d in dados:
+            nome = str(d.get(campo_nome) or "").strip()
+            cpf = "".join(
+                ch for ch in str(d.get(self._CAMPO_CPF) or "") if ch.isdigit()
+            )
+            matricula = str(d.get(campo_mat) or "").strip() if campo_mat else ""
+            # Sem matricula funcional o CPF vira a chave: e o que o cracha
+            # apresenta, e identificador nao pode ser nulo.
+            chave = matricula or cpf
+            if not nome or not chave:
+                continue
+            funcionarios.append(FuncionarioModel(
+                matricula=chave,
+                nome=nome,
+                documento=cpf or None,
+                setor=str(d.get(campo_setor) or "").strip() or None if campo_setor else None,
+                cargo=str(d.get(campo_cargo) or "").strip() or None if campo_cargo else None,
+            ))
+
+        com_cpf = sum(1 for f in funcionarios if f.documento)
+        print(f"[jacad] funcionarios: {len(funcionarios)} de {len(dados)}, "
+              f"{com_cpf} com CPF (nome em '{campo_nome}', "
+              f"matricula em '{campo_mat}')")
+        self._cache_funcionarios = funcionarios
+        return funcionarios
+
     def limpar_cache(self) -> None:
         """Descarta o que foi trazido do ERP, para a proxima chamada rebuscar.
 
@@ -253,6 +336,7 @@ class JacadRestClient:
         self._cache_matriculas = []
         self._cache_turmas = []
         self._cache_documentos = None
+        self._cache_funcionarios = None
 
     def listar_alunos(self) -> List[AlunoModel]:
         """Alunos com matricula ATIVA no periodo corrente.

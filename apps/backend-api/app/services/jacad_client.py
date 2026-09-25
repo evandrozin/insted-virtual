@@ -16,7 +16,7 @@ from typing import List, Protocol, Set
 from app.core import parametros
 from app.core.config import settings
 from app.data.campus_seed import SALAS_POR_PAVIMENTO
-from app.models.academico import AlunoModel, AulaModel, ProfessorModel, TurmaModel
+from app.models.academico import AlunoModel, AulaModel, FuncionarioModel, ProfessorModel, TurmaModel
 from app.models.enums import Pavimento
 
 # ---------------------------------------------------------------------------
@@ -27,6 +27,7 @@ from app.models.enums import Pavimento
 class JacadClient(Protocol):
     def listar_alunos(self) -> List[AlunoModel]: ...
     def listar_professores(self) -> List[ProfessorModel]: ...
+    def listar_funcionarios(self) -> List[FuncionarioModel]: ...
     def listar_turmas(self) -> List[TurmaModel]: ...
     def listar_grade_horaria(self) -> List[AulaModel]: ...
 
@@ -265,6 +266,32 @@ class JacadMockClient:
 
     def listar_professores(self) -> List[ProfessorModel]:
         return list(self._professores)
+
+    def listar_funcionarios(self) -> List[FuncionarioModel]:
+        """Um punhado, so para a tela ter o tipo representado.
+
+        Sem CPF de proposito: o mock nao inventa documento, como nao inventa
+        para aluno. Numero falso no lugar de CPF casaria por acidente com um
+        cracha real e colocaria a pessoa errada no painel.
+        """
+        return [
+            FuncionarioModel(
+                matricula=f"F{i:04d}",
+                nome=nome,
+                setor=setor,
+                cargo=cargo,
+            )
+            for i, (nome, setor, cargo) in enumerate(
+                [
+                    ("Marcia Ferreira Lima", "Secretaria Academica", "Secretaria"),
+                    ("Paulo Cesar Rocha", "Portaria", "Porteiro"),
+                    ("Helena Souza Prado", "Biblioteca", "Bibliotecaria"),
+                    ("Rogerio Alves Pinto", "TI", "Analista de Suporte"),
+                    ("Sandra Meireles Cruz", "Financeiro", "Assistente"),
+                ],
+                start=1,
+            )
+        ]
 
     def listar_turmas(self) -> List[TurmaModel]:
         return list(self._turmas)

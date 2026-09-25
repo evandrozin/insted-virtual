@@ -14,7 +14,9 @@ from typing import Any, Dict, Iterable, List
 
 from app.core import clock
 from app.core.config import settings
-from app.models.academico import AlunoModel, ProfessorModel, TurmaModel
+from app.models.academico import (
+    AlunoModel, FuncionarioModel, ProfessorModel, TurmaModel,
+)
 from app.services.jacad_client import obter_client
 
 
@@ -40,6 +42,28 @@ def _alunos(
             "situacao": a.situacao,
         }
         for a in alunos
+    ]
+
+
+def _funcionarios(funcionarios: Iterable[FuncionarioModel]) -> List[dict]:
+    """Normaliza funcionarios administrativos.
+
+    Diferente de aluno e professor, aqui o CPF costuma ser a unica chave que a
+    catraca apresenta - funcionario nao tem RA. Por isso `documento` vem junto
+    e o identificador cai no proprio CPF quando nao ha matricula funcional.
+    """
+    return [
+        {
+            "identificador": f.matricula,
+            "documento": f.documento,
+            "nome": f.nome,
+            "email": f.email,
+            "setor": f.setor,
+            "cargo": f.cargo,
+            "situacao": f.situacao,
+        }
+        for f in funcionarios
+        if f.matricula and f.matricula.strip()
     ]
 
 
@@ -76,6 +100,7 @@ async def espelhar() -> Dict[str, Any]:
         {
             "ALUNO": _alunos(client.listar_alunos(), client.listar_turmas()),
             "PROFESSOR": _professores(client.listar_professores()),
+            "FUNCIONARIO": _funcionarios(client.listar_funcionarios()),
         }
     )
     resumo["aplicado"] = True
