@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from typing import Dict, List
 
 from app.core import clock
+from app.core.config import settings
 from app.models.dashboard import (
     KPIsDiretoria,
     OcupacaoPavimento,
@@ -139,9 +140,14 @@ class ServicoDashboard:
         # Catraca sem nenhuma passagem ainda conta como online.
         offline = sum(1 for info in catracas.values() if not info.get("online", True))
 
+        predio = await self._resumo_do_predio()
+
         return KPIsDiretoria(
             atualizado_em=agora,
             alunos_no_campus=await self.store.total_no_campus(),
+            pessoas_no_predio=predio.get("total"),
+            pessoas_por_tipo=predio.get("por_tipo") or {},
+            pessoas_sem_cadastro=predio.get("sem_cadastro") or 0,
             alunos_esperados_agora=esperados,
             presentes_em_aula=em_aula,
             taxa_presenca_geral=taxa,
@@ -202,6 +208,32 @@ class ServicoDashboard:
         return pontos[-24:]
 
     # ------------------------------------------------------------------
+    async def _resumo_do_predio(self) -> dict:
+        """Quanta gente a catraca diz estar no predio, por tipo.
+
+        Vem do espelho, e nao do motor: o motor so conhece aluno com RA na
+        grade, entao funcionario e visitante nunca entravam na conta. O cartao
+        dizia 14 com 40 pessoas dentro - e o numero menor parecia o certo,
+        porque nada na tela indicava que ele era de outra pergunta.
+
+        Falha ou ausencia de banco devolve vazio: o painel volta a mostrar so
+        o numero do motor, que e o comportamento anterior.
+        """
+        if not settings.DATABASE_URL:
+            return {}
+        try:
+            from app.data import catraca_repository as catracas
+
+            resumo = await catracas.resumo_presenca()
+        except Exception as erro:
+            print(f"[dashboard] resumo do predio indisponivel: {erro}")
+            return {}
+        return {
+            "total": resumo["total"],
+            "por_tipo": resumo["por_tipo"],
+            "sem_cadastro": resumo["total"] - resumo["identificados"],
+        }
+
     async def snapshot(self) -> SnapshotDiretoria:
         agora = clock.agora()
         salas = await self.ocupacao_salas(agora)

@@ -72,6 +72,14 @@ export interface Maquete {
 export interface KPIs {
   atualizado_em: string;
   alunos_no_campus: number;
+  /**
+   * Todo mundo que a catraca diz estar no predio - aluno, funcionario e quem
+   * nao casou com o cadastro. `alunos_no_campus` conta so aluno reconhecido
+   * pelo motor, e por isso responde a outra pergunta.
+   */
+  pessoas_no_predio?: number | null;
+  pessoas_por_tipo?: Record<string, number>;
+  pessoas_sem_cadastro?: number;
   alunos_esperados_agora: number;
   presentes_em_aula: number;
   taxa_presenca_geral: number;

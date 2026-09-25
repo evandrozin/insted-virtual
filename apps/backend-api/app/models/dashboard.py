@@ -62,6 +62,15 @@ class OcupacaoPavimento(BaseModel):
 class KPIsDiretoria(BaseModel):
     atualizado_em: datetime
     alunos_no_campus: int
+    # Todo mundo que a catraca diz estar no predio: alunos, funcionarios e
+    # quem nao casou com o cadastro. Diferente de `alunos_no_campus`, que so
+    # conta aluno reconhecido pelo motor e por isso nao responde "quanta gente
+    # esta aqui" - que e a pergunta do cartao.
+    #
+    # Nulo quando nao ha espelho de catraca para consultar.
+    pessoas_no_predio: Optional[int] = None
+    pessoas_por_tipo: Dict[str, int] = Field(default_factory=dict)
+    pessoas_sem_cadastro: int = 0
     alunos_esperados_agora: int
     presentes_em_aula: int
     taxa_presenca_geral: float

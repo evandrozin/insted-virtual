@@ -70,7 +70,10 @@ export const Header: React.FC<{
 
       {dashboard && (
         <div className="top-title" style={{ textAlign: 'right' }}>
-          {dashboard.kpis.alunos_no_campus.toLocaleString('pt-BR')} no campus
+          {/* Mesma contagem do cartao: o predio inteiro, nao so alunos. */}
+          {(dashboard.kpis.pessoas_no_predio ?? dashboard.kpis.alunos_no_campus)
+            .toLocaleString('pt-BR')}{' '}
+          no campus
           <small>
             {dashboard.kpis.salas_em_aula} salas em aula · {dashboard.kpis.catracas_online}/
             {dashboard.kpis.catracas_total} catracas

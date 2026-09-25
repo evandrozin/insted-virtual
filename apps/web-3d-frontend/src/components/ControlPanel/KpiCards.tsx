@@ -20,6 +20,15 @@ function Delta({ valor }: { valor: number }) {
  * Bloco de indicadores da diretoria. O numero-heroi e a taxa de presenca
  * agora; os cartoes abaixo respondem "por que" essa taxa esta nesse patamar.
  */
+// Rotulo curto por tipo, para caber no rodape do cartao.
+const ROTULO_TIPO: Record<string, string> = {
+  PROFESSOR: 'professores',
+  FUNCIONARIO: 'funcionários',
+  TERCEIRIZADO: 'terceirizados',
+  VISITANTE: 'visitantes',
+  NAO_IDENTIFICADO: 'sem cadastro',
+};
+
 export const KpiCards: React.FC<Props> = ({ kpis }) => {
   const ausentesPct = kpis.alunos_esperados_agora
     ? (100 * kpis.ausentes) / kpis.alunos_esperados_agora
@@ -44,10 +53,27 @@ export const KpiCards: React.FC<Props> = ({ kpis }) => {
       </div>
 
       <div className="kpi-grid">
+        {/*
+          Prefere a contagem do espelho da catraca: ela inclui funcionario e
+          quem nao casou com o cadastro, que e o que "no campus" quer dizer.
+          Sem espelho, cai no numero do motor - so alunos reconhecidos.
+        */}
         <div className="kpi-card good">
           <div className="k-label">No campus</div>
-          <div className="k-value">{kpis.alunos_no_campus.toLocaleString('pt-BR')}</div>
-          <div className="k-foot">{kpis.fluxo_ultima_hora} passagens/1h</div>
+          <div className="k-value">
+            {(kpis.pessoas_no_predio ?? kpis.alunos_no_campus).toLocaleString('pt-BR')}
+          </div>
+          <div className="k-foot">
+            {kpis.pessoas_no_predio != null
+              ? [
+                  `${kpis.alunos_no_campus} em aula`,
+                  ...Object.entries(kpis.pessoas_por_tipo ?? {})
+                    .filter(([codigo]) => codigo !== 'ALUNO')
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([codigo, n]) => `${n} ${ROTULO_TIPO[codigo] ?? codigo.toLowerCase()}`),
+                ].join(' · ')
+              : `${kpis.fluxo_ultima_hora} passagens/1h`}
+          </div>
         </div>
 
         <div className={`kpi-card ${kpis.atrasados > 0 ? 'warn' : ''}`}>
