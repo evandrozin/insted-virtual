@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { buscarCadastroSalas, desativarSala, ErroApi, reativarSala } from '../lib/api';
 import { useCampus3D } from '../hooks/useCampus3D';
 import { useSessao } from '../hooks/useSessao';
-import { Login } from './Login';
 import { SalaFormulario } from './SalaFormulario';
 import type { RespostaCadastro, SalaCadastro } from '../lib/types';
 
@@ -24,10 +23,8 @@ export const CadastroSalas: React.FC<{ aoFechar: () => void }> = ({ aoFechar }) 
   const usuario = useSessao((s) => s.usuario);
   const loginHabilitado = useSessao((s) => s.loginHabilitado);
   const carregarConfig = useSessao((s) => s.carregarConfig);
-  const sair = useSessao((s) => s.sair);
   const expirar = useSessao((s) => s.expirar);
 
-  const [loginAberto, setLoginAberto] = useState(false);
   const [editando, setEditando] = useState<SalaCadastro | null>(null);
   const [criando, setCriando] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
@@ -123,26 +120,26 @@ export const CadastroSalas: React.FC<{ aoFechar: () => void }> = ({ aoFechar }) 
           </p>
 
           <div className="cadastro-acoes">
-            {usuario ? (
-              <>
-                <span className="cadastro-quem">
-                  {usuario.nome} · <b>{usuario.papel}</b>
-                </span>
-                {podeEditar && (
-                  <button className="botao-primario" onClick={() => setCriando(true)}>
-                    + Nova sala
-                  </button>
-                )}
-                <button className="botao-secundario" onClick={sair}>Sair</button>
-              </>
-            ) : (
-              loginHabilitado && (
-                <button className="botao-secundario" onClick={() => setLoginAberto(true)}>
-                  Entrar para editar
-                </button>
-              )
+            {podeEditar && (
+              <button className="botao-primario" onClick={() => setCriando(true)}>
+                + Nova sala
+              </button>
             )}
           </div>
+
+          {/*
+            Sem sessao esta tela e somente-leitura, e o aviso aponta para onde
+            entrar - o botao vive no header, um so para o sistema inteiro. Ter
+            um login aqui dentro significava repeti-lo em cada tela que
+            exigisse permissao, e escondia a entrada de quem nao estivesse
+            justamente no cadastro de salas.
+          */}
+          {!usuario && loginHabilitado && (
+            <div className="cadastro-aviso">
+              Somente leitura. Use <b>Entrar</b>, no topo da tela, para editar o
+              cadastro.
+            </div>
+          )}
 
           {aviso && <div className="cadastro-aviso">{aviso}</div>}
 
@@ -251,7 +248,6 @@ export const CadastroSalas: React.FC<{ aoFechar: () => void }> = ({ aoFechar }) 
         </div>
       </section>
 
-      {loginAberto && <Login aoFechar={() => setLoginAberto(false)} />}
 
       {(criando || editando) && (
         <SalaFormulario

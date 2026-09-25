@@ -3,6 +3,7 @@ import { useCampus3D } from '../../hooks/useCampus3D';
 import { INSTED } from '../../lib/theme';
 import marcaInsted from '../../assets/insted-marca.png';
 import { MenuGestao, type Painel } from '../MenuGestao';
+import { useSessao } from '../../hooks/useSessao';
 
 /**
  * Simbolo institucional (orbitas), recortado da arte oficial
@@ -13,9 +14,12 @@ const MarcaInsted: React.FC = () => (
   <img className="brand-mark" src={marcaInsted} alt="Insted" draggable={false} />
 );
 
-export const Header: React.FC<{ aoAbrirPainel?: (p: Painel) => void }> = ({
-  aoAbrirPainel,
-}) => {
+export const Header: React.FC<{
+  aoAbrirPainel?: (p: Painel) => void;
+  aoEntrar?: () => void;
+}> = ({ aoAbrirPainel, aoEntrar }) => {
+  const usuario = useSessao((s) => s.usuario);
+  const sair = useSessao((s) => s.sair);
   const conectado = useCampus3D((s) => s.conectado);
   const servidorEm = useCampus3D((s) => s.servidorEm);
   const modoRelogio = useCampus3D((s) => s.modoRelogio);
@@ -75,6 +79,32 @@ export const Header: React.FC<{ aoAbrirPainel?: (p: Painel) => void }> = ({
       )}
 
       {aoAbrirPainel && <MenuGestao aoEscolher={aoAbrirPainel} />}
+
+      {/*
+        Ponto unico de login do sistema. Ficava dentro do cadastro de salas,
+        onde so quem ja estava editando encontrava - e reaparecia em cada tela
+        que precisasse de permissao. Aqui e um so, no lugar onde se procura
+        conta.
+
+        Discreto porque a leitura do painel e aberta: a sessao autoriza apenas
+        a escrita no cadastro.
+      */}
+      {aoEntrar && (
+        usuario ? (
+          <div className="sessao-topo">
+            <span className="sessao-nome" title={`${usuario.email} · ${usuario.papel}`}>
+              {usuario.nome.split(' ')[0]}
+            </span>
+            <button type="button" className="sessao-botao" onClick={sair}>
+              Sair
+            </button>
+          </div>
+        ) : (
+          <button type="button" className="sessao-botao" onClick={aoEntrar}>
+            Entrar
+          </button>
+        )
+      )}
 
       <span className={`live-pill ${conectado ? 'on' : 'off'}`}>
         <i className="live-dot" />

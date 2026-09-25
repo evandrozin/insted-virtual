@@ -1214,41 +1214,36 @@ body {
 }
 .link-discreto:hover { color: var(--insted-text-light); }
 
-/* ------------------------------------------- entrada de sessao no canto */
+/* --------------------------------------------- sessao no header */
 
-/* Canto inferior esquerdo do viewport, ao lado da legenda. Discreto porque a
-   leitura do painel e aberta: a conta so autoriza escrita no cadastro. */
-.canto-login {
-  pointer-events: auto;
-  background: rgba(22, 27, 34, .88);
+/* Ponto unico de login, ao lado do menu de Gestao. Discreto porque a leitura
+   do painel e aberta: a sessao autoriza apenas a escrita no cadastro. */
+.sessao-botao {
+  background: none;
   border: 1px solid var(--insted-border);
   border-radius: var(--radius-sm);
-  padding: 8px 14px;
+  padding: 7px 14px;
   color: var(--insted-text-muted);
   font-size: 12px;
   cursor: pointer;
-  backdrop-filter: blur(8px);
+  white-space: nowrap;
   transition: color .15s, border-color .15s;
 }
-.canto-login:hover {
+.sessao-botao:hover {
   color: var(--insted-text-light);
   border-color: var(--insted-primary);
 }
 
-.canto-sessao {
-  pointer-events: auto;
+.sessao-topo {
   display: flex;
   align-items: center;
   gap: 8px;
 }
-.canto-sessao-nome {
-  background: rgba(22, 27, 34, .88);
-  border: 1px solid var(--insted-border);
-  border-radius: var(--radius-sm);
-  padding: 8px 12px;
+.sessao-nome {
   color: var(--insted-text-light);
   font-size: 12px;
-  backdrop-filter: blur(8px);
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 /* --------------------------------------------------- menu de gestao */
