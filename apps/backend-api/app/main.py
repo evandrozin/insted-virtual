@@ -107,6 +107,20 @@ async def _loop_sync_jacad() -> None:
     while True:
         await asyncio.sleep(parametros.jacad_sync_interval_s())
         try:
+            # Descarta o que o client trouxe antes, senao este loop e
+            # decorativo: a instancia e reaproveitada pelo processo inteiro e
+            # os caches dela nao expiram sozinhos. Aluno matriculado hoje so
+            # apareceria no proximo reinicio.
+            #
+            # Aqui, e nao dentro de sincronizar_jacad: no boot sao duas
+            # chamadas seguidas - pessoas, depois a grade - e limpar entre elas
+            # faria a segunda rebuscar o que a primeira acabara de trazer.
+            from app.services.jacad_client import obter_client
+
+            client = obter_client()
+            if hasattr(client, "limpar_cache"):
+                client.limpar_cache()
+
             resumo = await asyncio.to_thread(motor.sincronizar_jacad, True)
             _grade.update(estado="pronta", aulas=resumo["aulas"],
                           concluida_em=clock.agora().isoformat())

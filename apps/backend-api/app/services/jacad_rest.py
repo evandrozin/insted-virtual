@@ -180,12 +180,16 @@ class JacadRestClient:
             ]
         return self._cache_matriculas
 
-    # Nomes plausiveis do CPF no cadastro. O contrato desta rota nao esta
-    # documentado, e sondar a API nao responde (todo /api** devolve o mesmo
-    # 401). Em vez de fixar um chute, aceita-se o primeiro que aparecer - e a
-    # chave encontrada vai para o log, para o mapeamento virar evidencia.
-    _CAMPOS_CPF = ("cpf", "numeroCpf", "cpfAluno", "documento", "nrCpf")
+    # Campo do CPF: confirmado contra a API, nao suposto.
+    _CAMPO_CPF = "cpf"
+    # O do RA nessa rota nao foi confirmado; nas matriculas e "ra".
     _CAMPOS_RA = ("ra", "registroAcademico", "matricula")
+    # v1 e o que a documentacao e o resto do cliente usam; v2 apareceu numa
+    # indicacao e pode ser o caminho em outro ambiente. Tenta na ordem.
+    _ROTAS_CADASTRO = (
+        "/api/v1/academico/alunos",
+        "/api/v2/academico/alunos",
+    )
 
     def _documentos(self) -> Dict[str, str]:
         """RA -> CPF, a partir do cadastro de alunos.
@@ -201,34 +205,54 @@ class JacadRestClient:
             return self._cache_documentos
 
         mapa: Dict[str, str] = {}
-        try:
-            cadastro = self._todos("/api/v2/academico/alunos")
-        except Exception as erro:
-            print(f"[jacad] cadastro de alunos indisponivel ({erro}); "
-                  f"cruzamento seguira pelo RA")
+        cadastro: List[dict] = []
+        for rota in self._ROTAS_CADASTRO:
+            try:
+                cadastro = self._todos(rota)
+                break
+            except Exception as erro:
+                print(f"[jacad] {rota} indisponivel: {erro}")
+        if not cadastro:
+            print("[jacad] cadastro de alunos indisponivel; cruzamento pelo RA")
             self._cache_documentos = mapa
             return mapa
 
-        campo_cpf = campo_ra = None
+        campo_ra = next(
+            (c for c in self._CAMPOS_RA if any(i.get(c) for i in cadastro[:50])),
+            None,
+        )
+        if not campo_ra:
+            # Uma vez so, e o bastante para alguem dizer o nome certo.
+            print(f"[jacad] nao achei o RA no cadastro. Campos disponiveis: "
+                  f"{sorted(cadastro[0].keys())}")
+            self._cache_documentos = mapa
+            return mapa
+
         for item in cadastro:
-            if campo_cpf is None:
-                campo_cpf = next((c for c in self._CAMPOS_CPF if item.get(c)), None)
-                campo_ra = next((c for c in self._CAMPOS_RA if item.get(c)), None)
-                if campo_cpf and campo_ra:
-                    print(f"[jacad] cadastro: CPF em '{campo_cpf}', RA em '{campo_ra}'")
-                elif cadastro:
-                    # Uma vez so, e o bastante para alguem dizer o nome certo.
-                    print(f"[jacad] nao achei CPF/RA no cadastro. Campos "
-                          f"disponiveis: {sorted(item.keys())}")
-                    break
             ra = str(item.get(campo_ra) or "").strip()
-            cpf = "".join(ch for ch in str(item.get(campo_cpf) or "") if ch.isdigit())
+            cpf = "".join(
+                ch for ch in str(item.get(self._CAMPO_CPF) or "") if ch.isdigit()
+            )
             if ra and cpf:
                 mapa[ra] = cpf
 
-        print(f"[jacad] CPF obtido para {len(mapa)} de {len(cadastro)} alunos")
+        print(f"[jacad] CPF obtido para {len(mapa)} de {len(cadastro)} alunos "
+              f"(RA em '{campo_ra}')")
         self._cache_documentos = mapa
         return mapa
+
+    def limpar_cache(self) -> None:
+        """Descarta o que foi trazido do ERP, para a proxima chamada rebuscar.
+
+        Os caches sao por instancia, e a instancia e reaproveitada enquanto a
+        configuracao nao muda - ou seja, pelo processo inteiro. Sem isto o
+        resync periodico nao rebuscava nada: aluno matriculado hoje so
+        apareceria no proximo reinicio, e o CPF de quem entrou depois do boot
+        nunca chegaria.
+        """
+        self._cache_matriculas = []
+        self._cache_turmas = []
+        self._cache_documentos = None
 
     def listar_alunos(self) -> List[AlunoModel]:
         """Alunos com matricula ATIVA no periodo corrente.
