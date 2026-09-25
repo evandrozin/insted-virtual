@@ -99,14 +99,20 @@ class Settings:
     # --- Envio de e-mail ---------------------------------------------------
     # Existe para um proposito so: mandar o codigo de redefinicao de senha.
     #
-    # SMTP e nao uma API de terceiro (Resend, SendGrid) porque a instituicao ja
-    # tem servidor de e-mail - Microsoft 365 e Google Workspace atendem por
-    # SMTP - e assim o codigo sai de um endereco @insted.edu.br, que e o que o
-    # destinatario espera ver. Sem dependencia nova no requirements.
+    # Dois caminhos. RESEND_API_KEY manda por HTTPS na 443 e e o padrao, porque
+    # o Render bloqueia saida nas portas SMTP (25, 465, 587) no plano free -
+    # la o SMTP falha com "Network is unreachable" antes de qualquer login.
+    # Sem a chave, cai no SMTP, que continua certo em host que nao bloqueie.
     #
-    # Sem SMTP_HOST o recurso simplesmente nao se anuncia: /auth/config diz
-    # que a redefinicao por e-mail esta indisponivel e o painel nao mostra o
-    # link, em vez de oferecer um caminho que morre depois de tres telas.
+    # Sem nenhum dos dois o recurso nao se anuncia: /auth/config diz que a
+    # redefinicao por e-mail esta indisponivel e o painel nao mostra o link,
+    # em vez de oferecer um caminho que morre depois de tres telas.
+    RESEND_API_KEY: str = os.getenv("RESEND_API_KEY", "")
+
+    # Remetente, valido para os dois provedores. No Resend o dominio precisa
+    # estar verificado no painel deles; no SMTP costuma ter de ser a propria
+    # caixa autenticada.
+    EMAIL_REMETENTE: str = os.getenv("EMAIL_REMETENTE", "")
     SMTP_HOST: str = os.getenv("SMTP_HOST", "")
     SMTP_PORT: int = _int("SMTP_PORT", 587)
     SMTP_USUARIO: str = os.getenv("SMTP_USUARIO", "")

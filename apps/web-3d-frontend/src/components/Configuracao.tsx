@@ -248,6 +248,9 @@ export const Configuracao: React.FC<{ aoFechar: () => void }> = ({ aoFechar }) =
                 </dl>
                 <h3>
                 E-mail
+                {dados.email.provedor && (
+                  <span className="selo">{dados.email.provedor}</span>
+                )}
                 <Selo
                   ok={dados.email.configurado && !dados.email.erro}
                   sim={dados.email.erro ? 'falhando' : 'pronto'}

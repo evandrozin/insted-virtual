@@ -69,6 +69,17 @@ services:
       # Declaradas aqui, mesmo em branco, para aparecerem no painel do Render
       # esperando valor - nome de variavel que so existe no codigo e nome que
       # ninguem lembra na hora de configurar.
+      # Resend, por HTTPS na 443. E o caminho aqui porque este servico esta
+      # no plano free, e o Render bloqueia saida nas portas SMTP (25, 465,
+      # 587) - la o SMTP falha antes de qualquer login, com "Network is
+      # unreachable", e nenhuma senha de app resolve.
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_REMETENTE
+        sync: false
+
+      # Alternativa para host que nao bloqueie a porta. So e usada quando
+      # RESEND_API_KEY esta vazia.
       - key: SMTP_HOST
         sync: false
       - key: SMTP_USUARIO

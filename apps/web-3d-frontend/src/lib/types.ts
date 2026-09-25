@@ -318,6 +318,8 @@ export interface Integracoes {
   };
   email: {
     configurado: boolean;
+    // 'resend' (HTTPS) ou 'smtp'. null = nenhum configurado.
+    provedor: string | null;
     // O que falta para o envio funcionar, ou null se esta pronto.
     falta: string | null;
     servidor: string | null;

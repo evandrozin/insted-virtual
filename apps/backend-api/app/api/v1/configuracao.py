@@ -137,12 +137,17 @@ async def integracoes() -> dict:
         "email": {
             "configurado": correio.configurado(),
             "falta": correio.diagnostico(),
+            "provedor": correio.provedor(),
             "servidor": (
-                f"{settings.SMTP_HOST}:{settings.SMTP_PORT}"
+                "api.resend.com (HTTPS)" if correio.provedor() == "resend"
+                else f"{settings.SMTP_HOST}:{settings.SMTP_PORT}"
                 if settings.SMTP_HOST else None
             ),
             "remetente": correio.remetente() or None,
-            "modo": "TLS" if settings.SMTP_SSL else "STARTTLS",
+            "modo": (
+                "HTTPS" if correio.provedor() == "resend"
+                else "TLS" if settings.SMTP_SSL else "STARTTLS"
+            ),
             **correio.ultimo_resultado(),
         },
         "data_hora": {
