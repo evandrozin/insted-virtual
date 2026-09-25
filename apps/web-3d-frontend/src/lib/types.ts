@@ -218,6 +218,23 @@ export interface DetalheSala {
     inicio: string;
     fim: string;
   } | null;
+  /**
+   * No predio pela catraca e posicionado nesta sala, sem aula aberta. Nao
+   * entra na `chamada`: chamada e de aula, e nao ha aula.
+   */
+  no_campus?: Array<{
+    ra: string;
+    nome: string | null;
+    cadeira_id: string;
+    turma_id: string | null;
+  }>;
+  /** Proxima aula desta sala hoje - o que as carteiras ambar aguardam. */
+  proxima_aula?: {
+    disciplina: string;
+    turma_id: string;
+    inicio: string;
+    fim: string;
+  } | null;
   chamada: Array<{
     ra: string;
     nome: string;

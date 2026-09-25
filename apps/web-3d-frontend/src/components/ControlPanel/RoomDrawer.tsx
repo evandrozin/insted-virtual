@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { useCampus3D } from '../../hooks/useCampus3D';
-import { COR_PRESENCA, ROTULO_PRESENCA, hhmm } from '../../lib/theme';
+import { COR_CADEIRA, COR_PRESENCA, ROTULO_PRESENCA, hhmm } from '../../lib/theme';
 import { buscarDetalheSala } from '../../lib/api';
 import type { StatusPresenca } from '../../lib/types';
 
@@ -39,6 +39,7 @@ export const RoomDrawer: React.FC = () => {
   if (!salaFoco) return null;
 
   const chamada = detalhe?.chamada ?? [];
+  const noCampus = detalhe?.no_campus ?? [];
   const contar = (s: StatusPresenca) => chamada.filter((c) => c.status === s).length;
 
   const ordenada = [...chamada].sort((a, b) => {
@@ -76,7 +77,41 @@ export const RoomDrawer: React.FC = () => {
         <div className="drawer-list">
           {carregando && <div className="empty-state">Carregando chamada…</div>}
 
-          {!carregando && chamada.length === 0 && (
+          {/*
+            Sem aula, mas com gente sentada: a carteira acende ambar na
+            maquete, e antes o drawer dizia "sem aula em andamento" e mais
+            nada - a tela mostrando uma pessoa e os numeros negando que ela
+            existisse.
+          */}
+          {!carregando && chamada.length === 0 && noCampus.length > 0 && (
+            <>
+              <div className="empty-state">
+                {noCampus.length === 1
+                  ? '1 pessoa desta sala já está na instituição'
+                  : `${noCampus.length} pessoas desta sala já estão na instituição`}
+                {detalhe?.proxima_aula
+                  ? `, aguardando ${detalhe.proxima_aula.disciplina} às ${detalhe.proxima_aula.inicio}.`
+                  : '. Não há mais aula nesta sala hoje.'}
+              </div>
+              {noCampus.map((p) => (
+                <div key={p.ra} className="student-row">
+                  <i
+                    className="student-dot"
+                    style={{ background: COR_CADEIRA.NO_CAMPUS }}
+                  />
+                  <div>
+                    <div className="student-name">{p.nome ?? p.ra}</div>
+                    <div className="student-ra">
+                      RA {p.ra}
+                      {p.turma_id && ` · ${p.turma_id}`}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+
+          {!carregando && chamada.length === 0 && noCampus.length === 0 && (
             <div className="empty-state">
               Sem aula em andamento nesta sala. A chamada aparece quando a próxima
               turma entra na janela de chegada.

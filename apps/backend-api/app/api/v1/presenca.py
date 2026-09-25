@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 from app.core import clock
 from app.models.dashboard import SnapshotDiretoria
+from app.models.enums import StatusCadeira
 from app.services.campus_state import estado
 from app.services.dashboard_service import servico_dashboard
 from app.services.presence_engine import motor
@@ -49,6 +50,35 @@ async def detalhar_sala(sala_id: str) -> dict:
     )
     registros = await obter_store().presencas_da_aula(aula.id) if aula else []
 
+    # Quem esta no predio e foi posicionado nesta sala sem aula aberta. Sem
+    # isto a carteira acendia ambar na maquete e o drawer dizia "0 presente,
+    # sem aula em andamento" - a tela mostrando uma pessoa e os numeros
+    # negando que ela existisse.
+    no_campus = [
+        {
+            "ra": c.aluno_ra,
+            "nome": c.aluno_nome,
+            "cadeira_id": c.id,
+            "turma_id": (
+                estado.alunos[c.aluno_ra].turma_id
+                if c.aluno_ra in estado.alunos else None
+            ),
+        }
+        for c in sala.cadeiras
+        if c.status == StatusCadeira.NO_CAMPUS and c.aluno_ra
+    ]
+    no_campus.sort(key=lambda item: item["nome"] or "")
+
+    # A aula que essas pessoas estao esperando, para o drawer dizer o que a
+    # carteira acesa significa em vez de so mostrar um numero.
+    hoje = agora.weekday()
+    futuras = [
+        a for a in estado.aulas.values()
+        if a.sala_id == sala_id and a.dia_semana == hoje
+        and a.hora_inicio >= agora.time()
+    ]
+    proxima = min(futuras, key=lambda a: a.hora_inicio) if futuras else None
+
     return {
         "sala": {
             "id": sala.id, "nome": sala.nome, "tipo": sala.tipo,
@@ -78,6 +108,16 @@ async def detalhar_sala(sala_id: str) -> dict:
                 for r in registros
             ),
             key=lambda item: (item["status"], item["nome"]),
+        ),
+        "no_campus": no_campus,
+        "proxima_aula": (
+            {
+                "disciplina": proxima.disciplina,
+                "turma_id": proxima.turma_id,
+                "inicio": proxima.hora_inicio.strftime("%H:%M"),
+                "fim": proxima.hora_fim.strftime("%H:%M"),
+            }
+            if proxima else None
         ),
     }
 
