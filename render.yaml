@@ -79,9 +79,20 @@ services:
       - key: SMTP_PORT
         value: "587"
 
-      # Quando o ERP estiver acessivel.
+      # As tres do JaCad andam juntas e ficam no painel, nunca aqui.
+      #
+      # JACAD_MODO_MOCK ja teve `value: "true"` neste arquivo, e isso mordeu:
+      # o valor do blueprint sobrescreveu o do painel numa sincronizacao, o
+      # backend voltou para o ERP simulado e o espelho de pessoas foi
+      # reescrito com identificadores sinteticos. As passagens reais deixaram
+      # de casar com RA nenhum e o painel zerou - sem nada indicando que a
+      # causa tinha sido um deploy de configuracao.
+      #
+      # Com sync:false o blueprint deixa de opinar: quem decide se o ERP e
+      # real ou simulado e o ambiente, junto com a URL e o token que ele
+      # precisa para ser real.
       - key: JACAD_MODO_MOCK
-        value: "true"
+        sync: false
       - key: JACAD_BASE_URL
         sync: false
       - key: JACAD_TOKEN
