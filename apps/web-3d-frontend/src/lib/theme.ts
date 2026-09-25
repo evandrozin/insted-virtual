@@ -16,6 +16,9 @@ export const COR_CADEIRA: Record<StatusCadeira, string> = {
   RESERVADA: '#3B82F6',
   OCUPADA: '#00C9B7',
   ALERT_SOBRELOTACAO: '#EF4444',
+  // Ambar: separa "esta no predio" de "esta em aula" (o cyan) sem competir
+  // com o vermelho da sobrelotacao, que e o unico que pede acao.
+  NO_CAMPUS: '#F59E0B',
 };
 
 export const COR_PRESENCA: Record<StatusPresenca, string> = {

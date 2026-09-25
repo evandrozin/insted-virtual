@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timedelta
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Set
 
 from app.core import clock, parametros
 from app.core.config import settings
@@ -23,6 +23,7 @@ from app.models.dashboard import Alerta
 from app.models.enums import (
     DirecaoCatraca,
     SeveridadeAlerta,
+    StatusCadeira,
     StatusPresenca,
     TipoAlerta,
 )
@@ -52,6 +53,10 @@ def _dt_na_data(base: datetime, hora) -> datetime:
 class MotorPresenca:
     def __init__(self, state: CampusState) -> None:
         self.state = state
+        # Salas onde o ciclo anterior sentou gente que esta no predio fora de
+        # aula. Guardado para soltar exatamente essas carteiras no ciclo
+        # seguinte, sem varrer o campus inteiro atras delas.
+        self._salas_no_campus: Set[str] = set()
 
     @property
     def store(self):
@@ -169,6 +174,7 @@ class MotorPresenca:
             deltas.extend(await self._encerrar_aula(self.state.aulas[aula_id], agora))
 
         await self._marcar_ausencias(agora)
+        deltas.extend(await self._posicionar_no_campus(agora))
         await self._avaliar_alertas(agora)
         await self._amostrar_serie(agora)
         return deltas
@@ -244,6 +250,99 @@ class MotorPresenca:
         await self.store.fechar_aula(aula.id)
         await self.store.limpar_dedupe(f"{aula.id}:")
         return self._delta_sala(sala.id)
+
+    def _aula_referencia(self, turma_id: str, agora: datetime):
+        """Sala em que a turma esta hoje, para quem chegou fora de aula.
+
+        Proxima aula do dia; nao havendo mais nenhuma, a ultima que houve. O
+        aluno que chega as 17h para uma aula das 19h aparece na sala das 19h -
+        que e onde ele estaria - em vez de sumir da maquete.
+        """
+        hoje = agora.weekday()
+        hora = agora.time()
+        do_dia = [
+            a for a in self.state.aulas.values()
+            if a.turma_id == turma_id and a.dia_semana == hoje
+        ]
+        if not do_dia:
+            return None
+        futuras = [a for a in do_dia if a.hora_inicio >= hora]
+        if futuras:
+            return min(futuras, key=lambda a: a.hora_inicio)
+        return max(do_dia, key=lambda a: a.hora_fim)
+
+    async def _posicionar_no_campus(self, agora: datetime) -> List[dict]:
+        """Senta na maquete quem esta no predio sem aula aberta.
+
+        Recalculado inteiro a cada ciclo, e nao incrementalmente: o conjunto
+        muda por entrada, por saida e pela passagem do tempo (a aula de
+        referencia troca sozinha ao longo do dia). Reconstruir e mais barato
+        que rastrear cada uma dessas transicoes.
+        """
+        salas_antes = set(self._salas_no_campus)
+        for sala_id in salas_antes:
+            self._liberar_no_campus(sala_id)
+        self._salas_no_campus = set()
+
+        no_campus = await self.store.alunos_no_campus()
+        # Quem ja esta sentado tem aula aberta: a cor de presenca em aula
+        # manda, e reposicionar tiraria a pessoa da sala onde ela esta.
+        pendentes = [ra for ra in no_campus if ra not in self.state.cadeira_por_aluno]
+
+        por_sala: Dict[str, List[dict]] = {}
+        for ra in pendentes:
+            aluno = self.state.alunos.get(ra)
+            if aluno is None:
+                continue
+            aula = self._aula_referencia(aluno.turma_id, agora)
+            if aula is None:
+                continue  # turma sem aula hoje: nao ha sala a que pertencer
+            # Sala com aula aberta e da aula: encher de gente de outra turma
+            # mostraria uma ocupacao que nao existe.
+            if any(
+                self.state.aulas[aid].sala_id == aula.sala_id
+                for aid in self.state.aulas_ativas
+                if aid in self.state.aulas
+            ):
+                continue
+            por_sala.setdefault(aula.sala_id, []).append(
+                {"ra": ra, "nome": aluno.nome}
+            )
+
+        deltas: List[dict] = []
+        for sala_id, alunos in por_sala.items():
+            sala = self.state.sala(sala_id)
+            if sala is None:
+                continue
+            # Ordem estavel: varias instancias precisam chegar ao mesmo mapa.
+            alunos.sort(key=lambda x: x["ra"])
+            livres = [c for c in sala.cadeiras if c.status == StatusCadeira.LIVRE]
+            for aluno, cadeira in zip(alunos, livres):
+                cadeira.status = StatusCadeira.NO_CAMPUS
+                cadeira.aluno_ra = aluno["ra"]
+                cadeira.aluno_nome = aluno["nome"]
+                self.state.cadeira_por_aluno[aluno["ra"]] = cadeira.id
+            self._salas_no_campus.add(sala_id)
+
+        for sala_id in self._salas_no_campus | salas_antes:
+            deltas.extend(self._delta_sala(sala_id))
+        return deltas
+
+    def _liberar_no_campus(self, sala_id: str) -> None:
+        """Solta so as carteiras que este mecanismo ocupou.
+
+        Nao usa limpar_sala: ela zera a sala inteira, e se uma aula tiver
+        aberto nesta sala desde o ciclo anterior, isso apagaria a alocacao da
+        turma.
+        """
+        sala = self.state.sala(sala_id)
+        if sala is None:
+            return
+        for cadeira in sala.cadeiras:
+            if cadeira.status == StatusCadeira.NO_CAMPUS:
+                if cadeira.aluno_ra:
+                    self.state.cadeira_por_aluno.pop(cadeira.aluno_ra, None)
+                cadeira.liberar()
 
     async def _marcar_ausencias(self, agora: datetime) -> None:
         """Passada a tolerancia, quem nao chegou deixa de estar AGUARDANDO."""

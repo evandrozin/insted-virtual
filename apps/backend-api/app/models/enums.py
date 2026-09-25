@@ -7,6 +7,12 @@ class StatusCadeira(str, Enum):
     RESERVADA = "RESERVADA"
     OCUPADA = "OCUPADA"
     ALERT_SOBRELOTACAO = "ALERT_SOBRELOTACAO"
+    # Aluno esta no predio, pela catraca, mas nenhuma aula dele esta aberta.
+    # Fica na sala da proxima aula do dia - ou da ultima, se nao houver mais.
+    #
+    # Sem isto, quem chega cedo some da maquete: contava em "no campus" e o
+    # campus aparecia vazio, que era indistinguivel de nao haver ninguem.
+    NO_CAMPUS = "NO_CAMPUS"
 
 
 class StatusPresenca(str, Enum):

@@ -16,6 +16,7 @@ const LEGENDA: Array<[string, string]> = [
   ['Livre', COR_CADEIRA.LIVRE],
   ['Alocada (JACAD)', COR_CADEIRA.RESERVADA],
   ['Presente (catraca)', COR_CADEIRA.OCUPADA],
+  ['No campus (fora de aula)', COR_CADEIRA.NO_CAMPUS],
   ['Sobrelotacao', COR_CADEIRA.ALERT_SOBRELOTACAO],
 ];
 

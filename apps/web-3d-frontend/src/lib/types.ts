@@ -4,7 +4,9 @@ export type StatusCadeira =
   | 'LIVRE'
   | 'RESERVADA'
   | 'OCUPADA'
-  | 'ALERT_SOBRELOTACAO';
+  | 'ALERT_SOBRELOTACAO'
+  /** No predio pela catraca, sem aula aberta: sentado na sala da proxima aula. */
+  | 'NO_CAMPUS';
 
 export type StatusPresenca =
   | 'AGUARDANDO'
