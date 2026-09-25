@@ -113,6 +113,12 @@ ws://<host>/ws/catracas
 Se a controladora ficar sem rede, o buffer acumulado pode ser reenviado de uma
 vez em `POST /api/v1/catracas/lote`, preservando os `timestamp` originais.
 
+**No Insted, porém, o caminho em produção é outro**: a controladora fica em SQL
+Server na rede interna, sem rota até o backend, então um job replica as
+marcações para o Postgres e o backend lê de lá. Quem instala esse job é
+`scripts/instalar-job-catracas.ps1`, num comando só — o porquê de cada decisão
+está em [docs/catracas-replicacao.md](docs/catracas-replicacao.md).
+
 ### Ligando no JACAD de verdade
 
 Preencha `JACAD_BASE_URL` e `JACAD_TOKEN` e mude `JACAD_MODO_MOCK=false`.

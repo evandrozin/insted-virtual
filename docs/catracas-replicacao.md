@@ -78,56 +78,209 @@ Para acompanhamento em tempo real, de 1 em 1 minuto. O volume é pequeno —
 1.500 alunos geram alguns milhares de marcações por dia, e cada execução carrega
 só o que entrou desde a anterior.
 
-## Onde se cria: SQL Server Agent
+## Onde se instala: SQL Server Agent
 
-O script pronto está em [`scripts/replicar-catracas.ps1`](../scripts/replicar-catracas.ps1).
+> **No servidor do Insted esta seção não se aplica.** O controle de acesso roda
+> em **SQL Server 2019 Express** (`15.0.2000.5`), instância `ACESSO`, e Express
+> não tem Agent — `SQLAgent$ACESSO` existe, mas `Stopped` e `Disabled`, sem
+> como habilitar. Vá para [Sem SQL Server Agent](#sem-sql-server-agent-agendador-de-tarefas).
+> Esta seção vale para qualquer outra instalação, com Standard ou superior.
 
-**Antes**, uma vez no servidor:
+Dois scripts: [`scripts/replicar-catracas.ps1`](../scripts/replicar-catracas.ps1)
+é o que copia, e [`scripts/instalar-job-catracas.ps1`](../scripts/instalar-job-catracas.ps1)
+é o que cria o job que o chama de 3 em 3 minutos. Nada disso se faz no SSMS.
 
-1. Instale o **driver ODBC do PostgreSQL** (psqlODBC), 64 bits — um MSI:
-   <https://www.postgresql.org/ftp/odbc/versions/msi/>
+**Antes**, uma vez no servidor, instale o **driver ODBC do PostgreSQL**
+(psqlODBC), 64 bits — um MSI:
+<https://www.postgresql.org/ftp/odbc/versions/msi/>
 
-   Escolhido em vez do Npgsql de propósito. O Npgsql 8 só publica build para
-   .NET moderno, e o `powershell.exe` do Windows roda sobre .NET Framework: a
-   biblioteca carrega e falha por assembly incompatível. Versões antigas do
-   Npgsql funcionariam, mas arrastam meia dúzia de DLLs de dependência. O
-   `System.Data.Odbc` já faz parte do .NET Framework — nada para resolver.
+Escolhido em vez do Npgsql de propósito. O Npgsql 8 só publica build para
+.NET moderno, e o `powershell.exe` do Windows roda sobre .NET Framework: a
+biblioteca carrega e falha por assembly incompatível. Versões antigas do
+Npgsql funcionariam, mas arrastam meia dúzia de DLLs de dependência. O
+`System.Data.Odbc` já faz parte do .NET Framework — nada para resolver.
 
-2. Defina as credenciais como variáveis de ambiente **de máquina** — as de
-   usuário o serviço do Agent não enxerga:
+O instalador confere o driver, mas não baixa o MSI sozinho: puxar e executar um
+instalador da internet sem ninguém olhando não é coisa que um script de setup
+deva fazer calado.
 
-   ```powershell
-   [Environment]::SetEnvironmentVariable('PGHOST','aws-0-sa-east-1.pooler.supabase.com','Machine')
-   [Environment]::SetEnvironmentVariable('PGUSER','postgres.vbmdwkwakssenpvtumvg','Machine')
-   [Environment]::SetEnvironmentVariable('PGPASSWORD','...','Machine')
-   ```
+**Depois**, num PowerShell **como Administrador**, no servidor do controle de
+acesso:
 
-   Reinicie o serviço do SQL Server Agent para ele reler o ambiente.
+```powershell
+cd <caminho-do-repositorio>\scripts
+.\instalar-job-catracas.ps1 -PgHost aws-0-sa-east-1.pooler.supabase.com -PgUser postgres.<ref-do-projeto>
+```
 
-3. Rode o script à mão uma vez. A primeira execução traz o histórico em blocos
-   de 20 mil — o teto existe para não estourar o tempo tentando carregar anos de
-   uma vez. Repita até o log parar de avisar que há fila.
+A senha é pedida no terminal como `SecureString` — não entra na linha de
+comando, então não fica no histórico do shell nem em log de sessão.
 
-**O job**, no SSMS: `SQL Server Agent` → `Jobs` → botão direito → `New Job`.
+Ele faz, em ordem: exige elevação; confere o driver ODBC; testa a conexão com o
+Postgres consultando `catraca.gac_marcacao`, o que valida de uma vez
+credencial, rede, SSL e se o `db/catraca.sql` já foi aplicado; grava `PGHOST`,
+`PGUSER` e `PGPASSWORD` como variáveis **de máquina** — as de usuário o serviço
+do Agent não enxerga; **sobe o Agent** e o marca como início automático; cria o
+job com passo `CmdExec` e agenda de 3 em 3 minutos; e dispara a primeira
+execução, relatando como ela terminou.
 
-* **Steps** → `New`: tipo **`Operating system (CmdExec)`**, comando
+A ordem importa e custou uma tentativa para aparecer: `sp_add_jobserver`
+notifica o Agent no instante em que o job é criado, então com o serviço parado
+a criação falha em *"SQLServerAgent is not currently running so it cannot be
+notified of this action"* — e o job fica meio criado. Subir o serviço antes
+também resolve o outro lado: ele lê o ambiente ao iniciar, e uma variável
+gravada com ele já rodando só valeria depois de um reinício.
 
-  ```
-  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "<caminho>\replicar-catracas.ps1"
-  ```
+**Rodar de novo é seguro** — ele apaga o job e recria com a definição do
+arquivo. É a razão de existir: um job criado à mão meses atrás, com outro
+caminho ou outra agenda, é o tipo de divergência que ninguém percebe até a
+replicação parar. Sem argumentos ele reaproveita as credenciais já gravadas,
+então reinstalar depois de editar o script de replicação é um comando só:
 
-  Use `CmdExec`, não o tipo `PowerShell`: o host de PowerShell do Agent é
-  restrito e costuma falhar em cmdlets de sistema como o `Get-OdbcDriver`.
+```powershell
+.\instalar-job-catracas.ps1
+```
 
-* **Schedules** → `New`: recorrente, diariamente, **a cada 3 minutos**, das
-  00:00:00 às 23:59:59.
+Parâmetros que valem saber: `-IntervaloMinutos` (padrão 3), `-NomeJob`,
+`-ServidorSql` (instância nomeada: `.\INSTANCIA`), `-CaminhoScript` e
+`-NaoIniciar`, que instala sem disparar a primeira execução — útil quando se
+sabe que a carga inicial é longa e se prefere acompanhá-la pelo histórico.
 
-* **Advanced** → marque `Include step output in history`. Sem isso, quando algo
-  falhar o histórico mostra apenas "o passo falhou", sem a mensagem que diz por
-  quê.
+A primeira execução traz o histórico em blocos de 20 mil — o teto existe para
+não estourar o tempo tentando carregar anos de uma vez. Repita até o log parar
+de avisar que há fila.
 
 A conta de serviço do Agent precisa ler `GAC_MARCACAO` e alcançar a internet na
-porta 5432.
+porta 5432. É por isso que o instalador dispara a primeira execução em vez de
+se contentar com o teste de conexão: o passo roda sob a conta do serviço, não
+sob a de quem instalou, e é só ali que falta de permissão ou de saída aparece.
+
+> A senha do Postgres fica em variável de máquina, em texto claro — qualquer
+> administrador local lê. É o que o `replicar-catracas.ps1` espera; enquanto
+> for assim, use um usuário de banco só para esta replicação, com escrita
+> apenas no schema `catraca`.
+
+### O que ele monta, para conferir no SSMS
+
+| Onde | Valor | Por quê |
+|---|---|---|
+| Step, tipo | `Operating system (CmdExec)` | o host de PowerShell do Agent é restrito e costuma falhar em cmdlets de sistema como o `Get-OdbcDriver` |
+| Step, comando | `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "<caminho>\replicar-catracas.ps1"` | — |
+| Step → Advanced | `Include step output in history` (`@flags = 32`) | sem isso, quando algo falha o histórico mostra apenas "o passo falhou", sem a mensagem que diz por quê |
+| Schedule | diário, a cada 3 minutos, das 00:00:00 às 23:59:59 | a latência da replicação é a latência do painel |
+
+## Sem SQL Server Agent: Agendador de Tarefas
+
+**É o caminho do Insted.** Medido no servidor: `Express Edition (64-bit) |
+15.0.2000.5`, instância `ACESSO`, `SQLAgent$ACESSO` em `Stopped` / `Disabled`.
+
+O SQL Server **Express não tem Agent**. O serviço até aparece instalado, como
+`SQLAgent$<instância>`, mas sempre `Stopped` e `Disabled`, e não há como
+habilitá-lo — não é configuração, é limitação da edição. Para saber em qual
+caso você está:
+
+```powershell
+Get-Service SQLSERVERAGENT, 'SQLAgent$*' -ErrorAction SilentlyContinue | Select-Object Name, Status, StartType
+```
+
+`Disabled` é a assinatura do Express. Confirme a edição antes de concluir:
+
+```powershell
+$cn = New-Object System.Data.SqlClient.SqlConnection('Server=.;Database=master;Integrated Security=true;TrustServerCertificate=true')
+$cn.Open(); $cmd = $cn.CreateCommand()
+$cmd.CommandText = "select cast(serverproperty('Edition') as nvarchar(128)) + ' | ' + cast(serverproperty('ProductVersion') as nvarchar(128))"
+$cmd.ExecuteScalar(); $cn.Close()
+```
+
+Sendo Express, o relógio passa a ser o Agendador de Tarefas do Windows.
+[`scripts/instalar-tarefa-catracas.ps1`](../scripts/instalar-tarefa-catracas.ps1)
+faz o mesmo que o outro instalador — as mesmas conferências, a mesma primeira
+execução de prova:
+
+```powershell
+.\instalar-tarefa-catracas.ps1 -PgHost aws-0-sa-east-1.pooler.supabase.com -PgUser postgres.<ref-do-projeto> -IntervaloMinutos 5
+```
+
+Também vale escolher este caminho mesmo havendo Agent: agendar fora do SQL
+Server evita alterar a configuração de um servidor de terceiro em produção.
+
+Duas diferenças que não são cosméticas:
+
+**O log é responsabilidade nossa.** O Agent guarda a saída do passo no
+histórico do job; o Agendador descarta tudo que o processo escreve. Por isso a
+ação roda via `cmd.exe` com `>> log 2>&1`, e o arquivo fica em
+`replicacao.log`, ao lado do script (`-CaminhoLog` muda). Sem ele, uma falha às
+3 da manhã não deixa rastro nenhum.
+
+**A conta importa mais.** O `replicar-catracas.ps1` conecta na origem com
+`Integrated Security=true`. O padrão é `NT AUTHORITY\SYSTEM` — não pede senha,
+não expira, roda com ninguém logado — mas ele chega ao SQL Server como a conta
+de máquina (`DOMÍNIO\SERVIDOR$`), e desde o SQL Server 2012 isso não vem com
+acesso por padrão. Se a primeira execução falhar em *Login failed*, passe
+`-Conta DOMINIO\conta-de-servico` com uma conta que já leia o `ACESSOTA`; o
+instalador pede a senha no terminal.
+
+Por que `-Once` com repetição e não `-Daily`: repetição por minuto só existe
+nessa forma no Agendador. O instalador lê o gatilho de volta depois de
+registrar e avisa se a repetição indefinida não tiver grudado — em versões
+antigas do Windows isso falha em silêncio, e a tarefa rodaria **uma vez só**.
+
+Conferir depois, sem abrir o Agendador:
+
+```powershell
+Get-ScheduledTaskInfo -TaskName 'Insted Virtual - Replicar catracas' | Select-Object LastRunTime, LastTaskResult, NextRunTime
+```
+
+`LastTaskResult` igual a `0` é sucesso.
+
+### Dando acesso à origem para a conta da tarefa
+
+`Login failed for user 'NT AUTHORITY\SYSTEM'` na primeira execução é o caso
+comum, e não tem a ver com o Postgres: a tarefa roda sob SYSTEM, e o Windows a
+apresenta ao SQL Server como essa conta, que desde o SQL Server 2012 não vem
+com acesso por padrão.
+
+A saída preferível é **dar leitura a SYSTEM nas duas tabelas** — a tarefa
+continua sem senha guardada em lugar nenhum, que é a vantagem de rodar como
+SYSTEM. Como o `replicar-catracas.ps1` só lê da origem, `SELECT` nas duas
+tabelas basta; `db_datareader` daria acesso à base inteira do fornecedor sem
+necessidade.
+
+Num PowerShell como Administrador, no servidor:
+
+```powershell
+$cn = New-Object System.Data.SqlClient.SqlConnection('Server=.;Database=ACESSOTA;Integrated Security=true;TrustServerCertificate=true')
+$cn.Open(); $cmd = $cn.CreateCommand()
+$cmd.CommandText = @'
+if not exists (select 1 from sys.server_principals where name = 'NT AUTHORITY\SYSTEM')
+    create login [NT AUTHORITY\SYSTEM] from windows;
+if not exists (select 1 from sys.database_principals where name = 'NT AUTHORITY\SYSTEM')
+    create user [NT AUTHORITY\SYSTEM] for login [NT AUTHORITY\SYSTEM];
+grant select on TELESSVR.GAC_MARCACAO to [NT AUTHORITY\SYSTEM];
+grant select on TELESSVR.GAC_PESSOA   to [NT AUTHORITY\SYSTEM];
+'@
+$cmd.ExecuteNonQuery(); $cn.Close()
+```
+
+É idempotente e só concede leitura — não altera nada do controle de acesso.
+Quem roda precisa ser `sysadmin` na instância.
+
+Depois, rode o instalador de novo. Ele recria a tarefa e dispara a execução:
+
+```powershell
+.\instalar-tarefa-catracas.ps1 -IntervaloMinutos 5
+```
+
+**A alternativa**, se a política da instituição não permitir conceder acesso a
+SYSTEM: use uma conta de serviço que já leia o `ACESSOTA`.
+
+```powershell
+.\instalar-tarefa-catracas.ps1 -IntervaloMinutos 5 -Conta DOMINIO\conta-de-servico
+```
+
+O instalador pede a senha no terminal e a entrega ao Agendador, que a guarda no
+cofre do Windows. O custo é que **troca de senha quebra a tarefa em silêncio** —
+ela passa a falhar a cada ciclo, e só o log mostra. Por isso a primeira opção é
+preferível.
 
 ## Por que não mandar direto para a API
 
