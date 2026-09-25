@@ -36,6 +36,32 @@ def _exige_banco() -> None:
         )
 
 
+def _ensalamento() -> dict:
+    """Como os nomes de sala do ERP se traduzem nos ids da maquete.
+
+    O ERP nomeia a sala pelo ensalamento ("04A"); a maquete usa o id da planta
+    ("ST_04"). Sem traducao a aula e descartada por sala inexistente - e ate
+    agora isso acontecia em silencio: o contador existia no cliente e nao era
+    lido em lugar nenhum, entao uma sala renomeada na Secretaria sumia da
+    maquete sem nada indicar por que.
+
+    `nao_mapeadas` e o que precisa de acao: ou a sala entra no de-para, ou e
+    renomeada no ERP para bater com um nome ja conhecido.
+    """
+    from app.services.jacad_client import obter_client
+    from app.services.jacad_rest import SALA_DO_ENSALAMENTO
+
+    cliente = obter_client()
+    nao_mapeadas = dict(getattr(cliente, "salas_sem_mapeamento", {}) or {})
+    return {
+        "ensalamento_conhecido": sorted(SALA_DO_ENSALAMENTO.keys()),
+        "salas_nao_mapeadas": dict(
+            sorted(nao_mapeadas.items(), key=lambda kv: -kv[1])
+        ),
+        "aulas_descartadas": sum(nao_mapeadas.values()),
+    }
+
+
 async def _situacao_alimentador() -> dict:
     """Saude do laco que leva as passagens replicadas ao motor de presenca.
 
@@ -115,6 +141,7 @@ async def integracoes() -> dict:
             "alunos": len(estado.alunos),
             "turmas": len(estado.turmas),
             "aulas": len(estado.aulas),
+            **_ensalamento(),
         },
         "catracas": {
             "modo": "simulado" if parametros.simulador_ativo() else "integrado",

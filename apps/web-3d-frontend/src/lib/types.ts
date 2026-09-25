@@ -317,6 +317,11 @@ export interface Integracoes {
     alunos: number;
     turmas: number;
     aulas: number;
+    /** Nomes de sala do ERP que a maquete reconhece. */
+    ensalamento_conhecido?: string[];
+    /** Nome do ERP -> quantas aulas foram descartadas por nao casar. */
+    salas_nao_mapeadas?: Record<string, number>;
+    aulas_descartadas?: number;
   };
   catracas: {
     modo: 'simulado' | 'integrado';

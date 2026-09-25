@@ -152,6 +152,39 @@ export const Configuracao: React.FC<{ aoFechar: () => void }> = ({ aoFechar }) =
                   <dd>a cada {dados.jacad.intervalo_sync_min} min</dd>
                   <dt>Última sincronização</dt>
                   <dd>{dados.jacad.ultima_sync ? hhmm(dados.jacad.ultima_sync) : '—'}</dd>
+                  <dt>Ensalamento</dt>
+                  <dd>
+                    {dados.jacad.aulas_descartadas ? (
+                      <>
+                        <span className="selo alerta">
+                          {dados.jacad.aulas_descartadas} aula(s) descartada(s)
+                        </span>
+                        <br />
+                        {/*
+                          O nome vem do ERP e nao casou com nenhum id da
+                          maquete. Ou entra no de-para, ou a sala e renomeada
+                          no ERP para um dos nomes conhecidos.
+                        */}
+                        {Object.entries(dados.jacad.salas_nao_mapeadas ?? {}).map(
+                          ([nome, n]) => (
+                            <code key={nome} style={{ marginRight: 8 }}>
+                              {nome} ({n})
+                            </code>
+                          ),
+                        )}
+                      </>
+                    ) : (
+                      <span className="selo ok">
+                        todas as salas da grade reconhecidas
+                      </span>
+                    )}
+                    <br />
+                    <span className="config-nota">
+                      {(dados.jacad.ensalamento_conhecido ?? []).length} nome(s) de
+                      sala reconhecido(s):{' '}
+                      {(dados.jacad.ensalamento_conhecido ?? []).join(', ')}
+                    </span>
+                  </dd>
                   <dt>Trouxe</dt>
                   <dd>
                     {dados.jacad.alunos.toLocaleString('pt-BR')} alunos ·{' '}
