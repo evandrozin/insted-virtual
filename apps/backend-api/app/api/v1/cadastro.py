@@ -6,12 +6,14 @@ sala - e cada alteracao fica registrada com autor na trilha de auditoria.
 """
 from __future__ import annotations
 
+import asyncio
+import secrets
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
-from app.core import seguranca
+from app.core import correio, seguranca
 from app.core.config import settings
 from app.data import cadastro_repository as repo
 from app.models.enums import Pavimento
@@ -37,6 +39,16 @@ TIPOS_COM_ASSENTO = {"AULA", "LABORATORIO", "AUDITORIO", "TEATRO", "MULTIUSO", "
 class Credenciais(BaseModel):
     email: str
     senha: str
+
+
+class PedidoCodigo(BaseModel):
+    email: str
+
+
+class NovaSenha(BaseModel):
+    email: str
+    codigo: str
+    senha: str = Field(..., min_length=8)
 
 
 class SalaEntrada(BaseModel):
@@ -144,6 +156,10 @@ async def config_de_login() -> dict:
     """
     return {
         "login_habilitado": seguranca.login_habilitado() and bool(settings.DATABASE_URL),
+        # O painel so mostra "Esqueci minha senha" se houver como enviar. Um
+        # link que leva a tres telas e morre em "SMTP nao configurado" e pior
+        # que link nenhum.
+        "reset_por_email": correio.configurado() and bool(settings.DATABASE_URL),
     }
 
 
@@ -174,6 +190,99 @@ async def login(credenciais: Credenciais) -> dict:
         },
         "expira_em_horas": settings.SESSAO_HORAS,
     }
+
+
+# Mesma resposta para e-mail existente e inexistente. O objetivo nao e ser
+# vago: e que este endpoint e publico, e responder diferente transformaria a
+# redefinicao num verificador de quais e-mails tem conta no sistema.
+_RESPOSTA_NEUTRA = {
+    "enviado": True,
+    "mensagem": (
+        "Se houver conta com esse e-mail, o codigo chega em instantes. "
+        "Confira tambem a caixa de spam."
+    ),
+}
+
+
+@router.post("/auth/senha/solicitar")
+async def solicitar_codigo(pedido: PedidoCodigo) -> dict:
+    """Envia por e-mail um codigo de redefinicao.
+
+    Falha de envio tambem devolve a resposta neutra. Dizer "nao consegui
+    enviar" confirmaria que a conta existe - e o operador ve a causa no log,
+    que e onde o diagnostico pertence.
+    """
+    _exige_banco()
+    if not correio.configurado():
+        raise HTTPException(
+            503, "Redefinicao por e-mail indisponivel: SMTP nao configurado."
+        )
+
+    email = pedido.email.strip().lower()
+    usuario = await repo.buscar_usuario_por_email(email)
+    if usuario is None:
+        return _RESPOSTA_NEUTRA
+
+    if await repo.pedido_recente(usuario["id"], settings.RESET_INTERVALO_S):
+        return _RESPOSTA_NEUTRA
+
+    # secrets, nao random: random e previsivel a partir de saidas anteriores, e
+    # este numero e a unica coisa entre um estranho e a conta.
+    codigo = f"{secrets.randbelow(1_000_000):06d}"
+    await repo.criar_codigo(
+        usuario["id"],
+        seguranca.gerar_hash_codigo(codigo),
+        settings.RESET_VALIDADE_MIN,
+    )
+
+    try:
+        # to_thread porque smtplib e bloqueante: chamado direto, prenderia
+        # todas as conexoes do processo durante o handshake TLS.
+        await asyncio.to_thread(
+            correio.enviar,
+            email,
+            "Codigo para redefinir sua senha - Painel Insted",
+            correio.texto_codigo(
+                usuario["nome"], codigo, settings.RESET_VALIDADE_MIN
+            ),
+        )
+    except Exception as erro:
+        print(f"[senha] falha ao enviar codigo para {email}: "
+              f"{type(erro).__name__}: {erro}")
+
+    return _RESPOSTA_NEUTRA
+
+
+@router.post("/auth/senha/redefinir")
+async def redefinir_senha(entrada: NovaSenha) -> dict:
+    """Troca a senha mediante o codigo recebido por e-mail."""
+    _exige_banco()
+
+    # Uma mensagem so para codigo errado, expirado, ja usado e e-mail
+    # inexistente: distinguir diria a um estranho qual das quatro coisas ele
+    # acertou.
+    recusa = HTTPException(400, "Codigo invalido ou expirado. Peca um novo.")
+
+    email = entrada.email.strip().lower()
+    usuario = await repo.buscar_usuario_por_email(email)
+    if usuario is None:
+        raise recusa
+
+    reset = await repo.codigo_vigente(usuario["id"])
+    if reset is None:
+        raise recusa
+
+    if not seguranca.conferir_senha(entrada.codigo.strip(), reset["codigo_hash"]):
+        await repo.registrar_tentativa(reset["id"], settings.RESET_MAX_TENTATIVAS)
+        raise recusa
+
+    try:
+        senha_hash = seguranca.gerar_hash_senha(entrada.senha)
+    except ValueError as erro:
+        raise HTTPException(400, str(erro))
+
+    await repo.consumir_codigo(reset["id"], usuario["id"], senha_hash)
+    return {"redefinida": True, "mensagem": "Senha alterada. Entre com ela agora."}
 
 
 @router.get("/auth/eu")

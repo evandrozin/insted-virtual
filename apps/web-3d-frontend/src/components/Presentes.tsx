@@ -57,7 +57,11 @@ export const Presentes: React.FC<{ aoFechar: () => void }> = ({ aoFechar }) => {
     });
   }, [dados, busca, tipo]);
 
-  const hora = (iso: string) => iso.slice(11, 16);
+  // Com data, e nao so a hora: a janela de 18 horas atravessa a meia-noite, e
+  // "07:15" sozinho nao diz se a pessoa entrou hoje de manha ou ontem a noite.
+  // Ano fica de fora - dentro de 18 horas ele nunca desambigua nada.
+  const quando = (iso: string) =>
+    `${iso.slice(8, 10)}/${iso.slice(5, 7)} ${iso.slice(11, 16)}`;
 
   // Replicacao parada e campus vazio dao a mesma contagem. So o atraso separa
   // os dois casos, entao ele fica visivel em vez de escondido num diagnostico.
@@ -115,7 +119,7 @@ export const Presentes: React.FC<{ aoFechar: () => void }> = ({ aoFechar }) => {
 
               <p className={`config-nota ${desatualizado ? 'alerta' : ''}`}>
                 {dados.ultima_marcacao
-                  ? `Última passagem registrada às ${hora(dados.ultima_marcacao)}` +
+                  ? `Última passagem registrada em ${quando(dados.ultima_marcacao)}` +
                     (atraso !== null ? ` — há ${atraso} min.` : '.')
                   : 'Nenhuma passagem replicada ainda.'}
                 {desatualizado &&
@@ -176,7 +180,7 @@ export const Presentes: React.FC<{ aoFechar: () => void }> = ({ aoFechar }) => {
                       )}
                     </td>
                     <td className="muted">{p.turma ?? p.curso ?? '—'}</td>
-                    <td>{hora(p.desde)}</td>
+                    <td>{quando(p.desde)}</td>
                     <td className="muted">{p.terminal ?? '—'}</td>
                   </tr>
                 ))}

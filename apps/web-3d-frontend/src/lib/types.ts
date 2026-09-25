@@ -256,6 +256,9 @@ export interface Sessao {
 
 export interface ConfigLogin {
   login_habilitado: boolean;
+  // Falso quando nao ha SMTP configurado. A tela esconde o "Esqueci minha
+  // senha" nesse caso: melhor nao oferecer que oferecer e morrer no fim.
+  reset_por_email?: boolean;
 }
 
 /** Campos aceitos ao criar ou editar uma sala. */
@@ -298,6 +301,20 @@ export interface Integracoes {
     websocket: string;
     lote: string;
     identificador: string;
+    // Saude do laco que leva a passagem replicada ao motor de presenca.
+    // Separa "campus vazio" de "alimentador parado", que dao o mesmo zero.
+    alimentador?: {
+      ligado: boolean;
+      motivo_desligado: string | null;
+      processadas: number;
+      ultima_leitura: string | null;
+      erro: string | null;
+      intervalo_s: number;
+      no_espelho?: number;
+      identificados_no_espelho?: number;
+      ultima_marcacao?: string | null;
+      espelho_erro?: string;
+    };
   };
   data_hora: {
     fuso: string;

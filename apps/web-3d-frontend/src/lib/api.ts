@@ -89,6 +89,16 @@ export const buscarConfigLogin = () => get<ConfigLogin>('/auth/config');
 export const autenticar = (email: string, senha: string) =>
   enviar<Sessao>('POST', '/auth/login', { email, senha });
 
+export const solicitarCodigoSenha = (email: string) =>
+  enviar<{ enviado: boolean; mensagem: string }>(
+    'POST', '/auth/senha/solicitar', { email }
+  );
+
+export const redefinirSenha = (email: string, codigo: string, senha: string) =>
+  enviar<{ redefinida: boolean; mensagem: string }>(
+    'POST', '/auth/senha/redefinir', { email, codigo, senha }
+  );
+
 export const criarSala = (sala: SalaEntrada, token: string) =>
   enviar<{ sala: SalaEntrada }>('POST', '/cadastro/salas', sala, token);
 

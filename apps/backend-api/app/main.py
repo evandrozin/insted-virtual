@@ -170,7 +170,14 @@ async def lifespan(app: FastAPI):
     with _etapa("reconciliacao inicial"):
         await motor.reconciliar()
 
-    if settings.SIMULADOR_ATIVO:
+    # parametros.simulador_ativo() e nao settings.SIMULADOR_ATIVO: o parametro
+    # e editavel pela tela (Configuracao > Ajustes, marcado "exige reinicio") e
+    # resolve banco > ambiente > padrao. Lendo so o ambiente, desligar o
+    # simulador pela tela e reiniciar nao surtia efeito - e o /health, que ja
+    # reporta o valor resolvido, dizia "simulador: false" com o simulador de pe.
+    simulando = parametros.simulador_ativo()
+
+    if simulando:
         with _etapa("simulador"):
             from app.simulator.catraca_simulator import simulador
 
@@ -187,9 +194,15 @@ async def lifespan(app: FastAPI):
     # As catracas alimentam o motor quando o simulador esta desligado e ha
     # espelho replicado. Ligar os dois juntos misturaria passagem real com
     # inventada no mesmo painel.
-    if not settings.SIMULADOR_ATIVO and settings.DATABASE_URL:
+    if not simulando and settings.DATABASE_URL:
         _tarefas.append(asyncio.create_task(_loop_catracas()))
         print("[boot] passagens vindas das catracas replicadas")
+    else:
+        # Dizer por que, e nao so ficar calado: com o alimentador desligado o
+        # painel mostra campus vazio mesmo com o espelho cheio, e sem esta
+        # linha nada no processo indica que a decisao foi tomada aqui.
+        motivo = "simulador ativo" if simulando else "sem DATABASE_URL"
+        print(f"[boot] alimentador de catracas NAO ligado: {motivo}")
 
     if settings.LOOP_INTERNO:
         _tarefas.append(asyncio.create_task(_loop_reconciliacao()))

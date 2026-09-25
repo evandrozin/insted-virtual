@@ -96,5 +96,36 @@ class Settings:
     MAX_EVENTOS_FEED: int = _int("MAX_EVENTOS_FEED", 60)
     MAX_ALERTAS: int = _int("MAX_ALERTAS", 40)
 
+    # --- Envio de e-mail ---------------------------------------------------
+    # Existe para um proposito so: mandar o codigo de redefinicao de senha.
+    #
+    # SMTP e nao uma API de terceiro (Resend, SendGrid) porque a instituicao ja
+    # tem servidor de e-mail - Microsoft 365 e Google Workspace atendem por
+    # SMTP - e assim o codigo sai de um endereco @insted.edu.br, que e o que o
+    # destinatario espera ver. Sem dependencia nova no requirements.
+    #
+    # Sem SMTP_HOST o recurso simplesmente nao se anuncia: /auth/config diz
+    # que a redefinicao por e-mail esta indisponivel e o painel nao mostra o
+    # link, em vez de oferecer um caminho que morre depois de tres telas.
+    SMTP_HOST: str = os.getenv("SMTP_HOST", "")
+    SMTP_PORT: int = _int("SMTP_PORT", 587)
+    SMTP_USUARIO: str = os.getenv("SMTP_USUARIO", "")
+    SMTP_SENHA: str = os.getenv("SMTP_SENHA", "")
+    # Remetente. Vazio => usa SMTP_USUARIO, que e o caso comum.
+    SMTP_REMETENTE: str = os.getenv("SMTP_REMETENTE", "")
+    # 587 fala STARTTLS; 465 e TLS desde o inicio. O padrao acompanha a porta.
+    SMTP_SSL: bool = _bool("SMTP_SSL", _int("SMTP_PORT", 587) == 465)
+
+    # --- Redefinicao de senha ----------------------------------------------
+    # 15 minutos: tempo de sair do painel, abrir o e-mail e voltar, sem deixar
+    # um codigo de 6 digitos valido a tarde inteira.
+    RESET_VALIDADE_MIN: int = _int("RESET_VALIDADE_MIN", 15)
+    # Um codigo de 6 digitos tem 1 milhao de combinacoes - adivinhavel por
+    # forca bruta sem teto. Com 5 tentativas o codigo morre antes disso.
+    RESET_MAX_TENTATIVAS: int = _int("RESET_MAX_TENTATIVAS", 5)
+    # Intervalo minimo entre pedidos para o mesmo e-mail: evita usar o sistema
+    # para encher a caixa de entrada de alguem.
+    RESET_INTERVALO_S: int = _int("RESET_INTERVALO_S", 60)
+
 
 settings = Settings()

@@ -35,9 +35,16 @@ services:
       - key: LOOP_INTERNO
         value: "true"
 
-      # Enquanto nao houver catracas reais ligadas.
+      # As catracas reais estao ligadas desde 24/09/2026: o job no SQL Server
+      # replica para catraca.gac_marcacao e o backend le de la.
+      #
+      # Nao e so "parar de inventar passagem". Este flag ESCOLHE a fonte: com
+      # ele ligado o alimentador das catracas nem chega a subir (main.py), e o
+      # painel mostra campus vazio com o espelho cheio - foi exatamente o que
+      # aconteceu, e custou caro para achar, porque o simulador fora do horario
+      # de aula tambem nao gera nada e o processo parecia apenas ocioso.
       - key: SIMULADOR_ATIVO
-        value: "true"
+        value: "false"
 
       # Preenchidos no painel do Render (Environment), nunca no repositorio.
       # CORS_ORIGINS precisa listar o dominio do painel na Vercel, senao o
