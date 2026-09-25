@@ -60,6 +60,25 @@ services:
       - key: REDIS_URL
         sync: false
 
+      # Envio do codigo de redefinicao de senha. Sem isto o recurso nao se
+      # anuncia: /auth/config devolve reset_por_email:false e o painel esconde
+      # o "Esqueci minha senha", em vez de oferecer um caminho que morre na
+      # ultima tela. O acesso pelo terminal (redefinir_senha.py) nao depende
+      # destas variaveis.
+      #
+      # Declaradas aqui, mesmo em branco, para aparecerem no painel do Render
+      # esperando valor - nome de variavel que so existe no codigo e nome que
+      # ninguem lembra na hora de configurar.
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_USUARIO
+        sync: false
+      - key: SMTP_SENHA
+        sync: false
+      # Nao e segredo: 587 negocia STARTTLS, 465 e TLS desde o inicio.
+      - key: SMTP_PORT
+        value: "587"
+
       # Quando o ERP estiver acessivel.
       - key: JACAD_MODO_MOCK
         value: "true"
