@@ -36,6 +36,55 @@ def _exige_banco() -> None:
         )
 
 
+async def _situacao_alimentador() -> dict:
+    """Saude do laco que leva as passagens replicadas ao motor de presenca.
+
+    Tres coisas diferentes fazem o painel mostrar zero, e sem distingui-las o
+    diagnostico vira adivinhacao:
+
+      - o laco nao esta ligado (simulador ativo, ou sem DATABASE_URL);
+      - esta ligado e falhando (`erro` preenchido);
+      - esta saudavel e o campus e que esta vazio.
+
+    `no_espelho` fecha o circuito: e quanta gente a catraca diz que esta dentro,
+    contra `processadas`, que e quanto o motor consumiu. Divergencia grande
+    entre os dois aponta passagem que chega ao banco mas nao ao motor.
+    """
+    from app.services.catraca_feed import alimentador
+
+    ligado = not parametros.simulador_ativo() and bool(settings.DATABASE_URL)
+    situacao: dict = {
+        "ligado": ligado,
+        "motivo_desligado": (
+            None if ligado
+            else "simulador ativo" if parametros.simulador_ativo()
+            else "sem DATABASE_URL"
+        ),
+        "processadas": alimentador.processadas,
+        "ultima_leitura": (
+            alimentador.ultima_leitura.isoformat()
+            if alimentador.ultima_leitura else None
+        ),
+        "erro": alimentador.erro,
+        "intervalo_s": parametros.tick_catracas_s(),
+    }
+
+    if settings.DATABASE_URL:
+        # Falha aqui nao pode derrubar a tela que existe para diagnosticar.
+        try:
+            from app.data import catraca_repository as catracas
+
+            resumo = await catracas.resumo_presenca()
+            situacao["no_espelho"] = resumo["total"]
+            situacao["identificados_no_espelho"] = resumo["identificados"]
+            ultima = await catracas.ultima_marcacao()
+            situacao["ultima_marcacao"] = ultima.isoformat() if ultima else None
+        except Exception as erro:
+            situacao["espelho_erro"] = f"{type(erro).__name__}: {erro}"
+
+    return situacao
+
+
 # ---------------------------------------------------------------------------
 # Situacao das integracoes
 # ---------------------------------------------------------------------------
@@ -77,6 +126,10 @@ async def integracoes() -> dict:
             "websocket": "/ws/catracas",
             "lote": "POST /api/v1/catracas/lote",
             "identificador": "O cracha usa o mesmo RA/matricula do JACAD.",
+            # Sem isto, alimentador parado e campus vazio sao indistinguiveis
+            # no painel: os dois mostram zero. O erro do ciclo so aparecia no
+            # stdout do processo, onde ninguem que use a tela vai olhar.
+            "alimentador": await _situacao_alimentador(),
         },
         "data_hora": {
             "fuso": clock.fuso(),

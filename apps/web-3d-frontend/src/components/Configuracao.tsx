@@ -192,6 +192,51 @@ export const Configuracao: React.FC<{ aoFechar: () => void }> = ({ aoFechar }) =
                   </dd>
                   <dt>Identificador</dt>
                   <dd>{dados.catracas.identificador}</dd>
+                  {dados.catracas.alimentador && (
+                    <>
+                      <dt>Replicação → motor</dt>
+                      <dd>
+                        {!dados.catracas.alimentador.ligado ? (
+                          <span className="selo alerta">
+                            desligado ({dados.catracas.alimentador.motivo_desligado})
+                          </span>
+                        ) : dados.catracas.alimentador.erro ? (
+                          <>
+                            <span className="selo alerta">falhando</span>
+                            <br />
+                            <code>{dados.catracas.alimentador.erro}</code>
+                          </>
+                        ) : (
+                          <>
+                            {dados.catracas.alimentador.processadas.toLocaleString('pt-BR')}{' '}
+                            passagem(ns) entregues ao motor · lê a cada{' '}
+                            {dados.catracas.alimentador.intervalo_s}s
+                          </>
+                        )}
+                      </dd>
+                      <dt>No espelho agora</dt>
+                      <dd>
+                        {dados.catracas.alimentador.espelho_erro ? (
+                          <code>{dados.catracas.alimentador.espelho_erro}</code>
+                        ) : (
+                          <>
+                            {(dados.catracas.alimentador.no_espelho ?? 0).toLocaleString('pt-BR')}{' '}
+                            dentro, {(dados.catracas.alimentador.identificados_no_espelho ?? 0).toLocaleString('pt-BR')}{' '}
+                            no cadastro acadêmico
+                            {dados.catracas.alimentador.ultima_marcacao && (
+                              <>
+                                {' '}· última passagem{' '}
+                                {dados.catracas.alimentador.ultima_marcacao
+                                  .slice(5, 16)
+                                  .replace('T', ' ')
+                                  .replace(/^(\d{2})-(\d{2})/, '$2/$1')}
+                              </>
+                            )}
+                          </>
+                        )}
+                      </dd>
+                    </>
+                  )}
                   <dt>Como enviar</dt>
                   <dd>
                     <code>{dados.catracas.webhook}</code>

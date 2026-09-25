@@ -13,7 +13,16 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
+from app.core import clock
 from app.data.conexao import abrir
+
+# O relogio e o do campus, nao o do servidor.
+#
+# `mar_datahora` guarda hora de parede de Campo Grande - e o que a catraca
+# registrou. No Render o processo roda em UTC, entao `datetime.now()` daria
+# 01:40 enquanto a catraca gravava 21:40: a janela de 18 horas escorregaria
+# quatro horas e deixaria de fora quem entrou de madrugada. `clock.agora()` ja
+# devolve a hora de parede local, que e a mesma escala do dado.
 
 # Quanto tempo depois da entrada a pessoa deixa de contar como presente sem ter
 # registrado saida.
@@ -33,7 +42,7 @@ async def presentes_agora(momento: Optional[datetime] = None) -> List[Dict[str, 
     e melhor mostrar "fulano, nao identificado no JaCad" do que omitir alguem
     que esta fisicamente no predio.
     """
-    agora = momento or datetime.now()
+    agora = momento or clock.agora()
     desde = agora - timedelta(hours=JANELA_PRESENCA_H)
 
     conexao = await abrir()
@@ -172,7 +181,7 @@ async def identificadores_presentes(momento: Optional[datetime] = None) -> List[
     painel cruza isso com o cadastro do lado do banco e nao quer a lista inteira
     trafegando.
     """
-    agora = momento or datetime.now()
+    agora = momento or clock.agora()
     desde = agora - timedelta(hours=JANELA_PRESENCA_H)
 
     conexao = await abrir()
