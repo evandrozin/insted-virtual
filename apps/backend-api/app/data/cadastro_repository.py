@@ -68,6 +68,34 @@ async def criar_usuario(email: str, nome: str, senha_hash: str, papel: str) -> d
     return dict(linha)
 
 
+async def redefinir_senha(email: str, senha_hash: str) -> Optional[dict]:
+    """Troca a senha de quem ja existe. Devolve None se o e-mail nao existir.
+
+    Separado de `criar_usuario` de proposito: criar recusa e-mail repetido, que
+    e a protecao certa contra duplicar conta por engano. Sem esta funcao, senha
+    esquecida so se resolvia com UPDATE na mao - e quem faz isso precisa gerar
+    o hash scrypt por fora, o que na pratica leva alguem a gravar senha em
+    texto puro na coluna e derrubar o login inteiro.
+
+    Reativa a conta junto: conta desativada com senha nova continuaria sem
+    conseguir entrar, e o motivo nao apareceria em lugar nenhum.
+    """
+    conexao = await _conectar()
+    try:
+        linha = await conexao.fetchrow(
+            """
+            update usuario
+               set senha_hash = $2, ativo = true, atualizado_em = now()
+             where email = lower($1)
+            returning id, email, nome, papel, ativo
+            """,
+            email.strip(), senha_hash,
+        )
+    finally:
+        await conexao.close()
+    return dict(linha) if linha else None
+
+
 async def listar_usuarios() -> List[dict]:
     conexao = await _conectar()
     try:
@@ -80,6 +108,121 @@ async def listar_usuarios() -> List[dict]:
     finally:
         await conexao.close()
     return [dict(l) for l in linhas]
+
+
+# ---------------------------------------------------------------------------
+# Redefinicao de senha
+# ---------------------------------------------------------------------------
+
+async def pedido_recente(usuario_id: int, intervalo_s: int) -> bool:
+    """Ja houve pedido para este usuario dentro do intervalo.
+
+    Sem isso, quem souber um e-mail valido dispara mensagem sem limite e
+    transforma a redefinicao num jeito de encher a caixa de entrada de alguem.
+    """
+    conexao = await _conectar()
+    try:
+        return bool(await conexao.fetchval(
+            """
+            select 1 from senha_reset
+             where usuario_id = $1
+               and criado_em > now() - make_interval(secs => $2)
+             limit 1
+            """,
+            usuario_id, intervalo_s,
+        ))
+    finally:
+        await conexao.close()
+
+
+async def criar_codigo(usuario_id: int, codigo_hash: str, validade_min: int) -> None:
+    """Guarda o codigo novo e invalida os anteriores do mesmo usuario.
+
+    Invalidar antes de inserir e o que faz "pedi outro codigo" significar o que
+    o usuario espera: o que chegou por ultimo e o unico que funciona. Sem isso
+    todos os codigos do dia continuariam valendo ate expirar.
+    """
+    conexao = await _conectar()
+    try:
+        async with conexao.transaction():
+            await conexao.execute(
+                """
+                update senha_reset set usado_em = now()
+                 where usuario_id = $1 and usado_em is null
+                """,
+                usuario_id,
+            )
+            await conexao.execute(
+                """
+                insert into senha_reset (usuario_id, codigo_hash, expira_em)
+                values ($1, $2, now() + make_interval(mins => $3))
+                """,
+                usuario_id, codigo_hash, validade_min,
+            )
+    finally:
+        await conexao.close()
+
+
+async def codigo_vigente(usuario_id: int) -> Optional[dict]:
+    """O codigo ainda utilizavel deste usuario, se houver."""
+    conexao = await _conectar()
+    try:
+        linha = await conexao.fetchrow(
+            """
+            select id, codigo_hash, tentativas
+              from senha_reset
+             where usuario_id = $1
+               and usado_em is null
+               and expira_em > now()
+             order by criado_em desc
+             limit 1
+            """,
+            usuario_id,
+        )
+    finally:
+        await conexao.close()
+    return dict(linha) if linha else None
+
+
+async def registrar_tentativa(reset_id: int, teto: int) -> None:
+    """Conta a tentativa errada e queima o codigo ao bater o teto."""
+    conexao = await _conectar()
+    try:
+        await conexao.execute(
+            """
+            update senha_reset
+               set tentativas = tentativas + 1,
+                   usado_em = case when tentativas + 1 >= $2 then now() else null end
+             where id = $1
+            """,
+            reset_id, teto,
+        )
+    finally:
+        await conexao.close()
+
+
+async def consumir_codigo(reset_id: int, usuario_id: int, senha_hash: str) -> None:
+    """Marca o codigo como usado e troca a senha, numa transacao so.
+
+    Juntas de proposito: se a troca falhasse depois de marcar o codigo, o
+    usuario ficaria sem senha nova e sem codigo para tentar de novo.
+    """
+    conexao = await _conectar()
+    try:
+        async with conexao.transaction():
+            await conexao.execute(
+                "update senha_reset set usado_em = now() where id = $1", reset_id
+            )
+            await conexao.execute(
+                """
+                update usuario
+                   set senha_hash = $2, ativo = true, atualizado_em = now()
+                 where id = $1
+                """,
+                usuario_id, senha_hash,
+            )
+    finally:
+        await conexao.close()
 
 
 # ---------------------------------------------------------------------------

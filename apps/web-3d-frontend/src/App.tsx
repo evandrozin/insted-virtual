@@ -4,11 +4,13 @@ import { CadastroSalas } from './components/CadastroSalas';
 import { Configuracao } from './components/Configuracao';
 import { Pessoas } from './components/Pessoas';
 import { Presentes } from './components/Presentes';
+import { Login } from './components/Login';
 import type { Painel } from './components/MenuGestao';
 import { FloorMap } from './components/FloorMap';
 import { ControlPanel, EventTicker, Header, RoomDrawer } from './components/ControlPanel';
 import { useCampus3D } from './hooks/useCampus3D';
 import { useSocket } from './hooks/useSocket';
+import { useSessao } from './hooks/useSessao';
 import { COR_CADEIRA } from './lib/theme';
 
 const LEGENDA: Array<[string, string]> = [
@@ -69,6 +71,9 @@ function TelaDeBoot() {
 export default function App() {
   useSocket();
   const [painel, setPainel] = useState<Painel | null>(null);
+  const [loginAberto, setLoginAberto] = useState(false);
+  const usuario = useSessao((s) => s.usuario);
+  const sair = useSessao((s) => s.sair);
 
   const maquete = useCampus3D((s) => s.maquete);
   const modoVisao = useCampus3D((s) => s.modoVisao);
@@ -124,6 +129,30 @@ export default function App() {
                   </span>
                 ))}
               </div>
+
+              {/*
+                Canto inferior esquerdo: discreto de proposito. O painel e um
+                telao de leitura aberta - a conta so autoriza escrita, entao a
+                entrada nao disputa atencao com os indicadores.
+              */}
+              {usuario ? (
+                <div className="canto-sessao">
+                  <span className="canto-sessao-nome" title={usuario.email}>
+                    {usuario.nome}
+                  </span>
+                  <button type="button" className="canto-login" onClick={sair}>
+                    Sair
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="canto-login"
+                  onClick={() => setLoginAberto(true)}
+                >
+                  Entrar
+                </button>
+              )}
             </div>
           </div>
         </main>
@@ -132,6 +161,8 @@ export default function App() {
       </div>
 
       <EventTicker />
+
+      {loginAberto && <Login aoFechar={() => setLoginAberto(false)} />}
       <RoomDrawer />
       {painel === 'SALAS' && <CadastroSalas aoFechar={() => setPainel(null)} />}
       {painel === 'PESSOAS' && <Pessoas aoFechar={() => setPainel(null)} />}

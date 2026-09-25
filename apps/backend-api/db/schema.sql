@@ -158,6 +158,31 @@ create table if not exists usuario (
 
 create index if not exists usuario_ativo on usuario (email) where ativo;
 
+-- Codigo de redefinicao de senha, enviado por e-mail.
+--
+-- Guarda o HASH do codigo, nao o codigo: se o banco vazar, quem ler nao
+-- consegue redefinir senha de ninguem - mesma razao de senha_hash existir.
+--
+-- `tentativas` nao e telemetria. Um codigo de 6 digitos tem 1 milhao de
+-- combinacoes, adivinhavel por forca bruta em minutos; com teto de tentativas
+-- o codigo morre muito antes disso.
+--
+-- `usado_em` deixa o codigo de uso unico: conferir por "existe e nao expirou"
+-- permitiria reusar o mesmo codigo enquanto valesse.
+create table if not exists senha_reset (
+    id          bigint generated always as identity primary key,
+    usuario_id  integer not null references usuario (id) on delete cascade,
+    codigo_hash text    not null,
+    expira_em   timestamptz not null,
+    usado_em    timestamptz,
+    tentativas  integer not null default 0,
+    criado_em   timestamptz not null default now()
+);
+
+-- Busca sempre pelo codigo vigente de um usuario.
+create index if not exists senha_reset_por_usuario
+    on senha_reset (usuario_id, criado_em desc);
+
 create table if not exists sala_auditoria (
     id           bigint generated always as identity primary key,
     sala_codigo  text not null,
@@ -296,6 +321,7 @@ alter table tipo_pessoa         enable row level security;
 alter table pessoa              enable row level security;
 alter table usuario             enable row level security;
 alter table sala_auditoria      enable row level security;
+alter table senha_reset         enable row level security;
 alter table parametro           enable row level security;
 alter table parametro_auditoria enable row level security;
 

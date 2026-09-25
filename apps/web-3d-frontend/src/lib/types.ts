@@ -256,6 +256,9 @@ export interface Sessao {
 
 export interface ConfigLogin {
   login_habilitado: boolean;
+  // Falso quando nao ha SMTP configurado. A tela esconde o "Esqueci minha
+  // senha" nesse caso: melhor nao oferecer que oferecer e morrer no fim.
+  reset_por_email?: boolean;
 }
 
 /** Campos aceitos ao criar ou editar uma sala. */

@@ -1187,6 +1187,70 @@ body {
   line-height: 1.5;
 }
 
+/* Aviso de sucesso no formulario - par do .form-erro, mesma caixa em verde.
+   Usado quando a senha e trocada e a pessoa volta para o login. */
+.form-aviso {
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(34, 197, 94, .45);
+  background: rgba(34, 197, 94, .1);
+  color: #86efac;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* Acao secundaria dentro do formulario ("Esqueci minha senha", "Voltar").
+   Botao e nao <a>: nao navega para lugar nenhum, so troca a etapa - e um
+   link falso rouba o comportamento que o usuario espera do botao direito. */
+.link-discreto {
+  align-self: center;
+  background: none;
+  border: none;
+  padding: 4px;
+  color: var(--insted-text-muted);
+  font-size: 12px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.link-discreto:hover { color: var(--insted-text-light); }
+
+/* ------------------------------------------- entrada de sessao no canto */
+
+/* Canto inferior esquerdo do viewport, ao lado da legenda. Discreto porque a
+   leitura do painel e aberta: a conta so autoriza escrita no cadastro. */
+.canto-login {
+  pointer-events: auto;
+  background: rgba(22, 27, 34, .88);
+  border: 1px solid var(--insted-border);
+  border-radius: var(--radius-sm);
+  padding: 8px 14px;
+  color: var(--insted-text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  transition: color .15s, border-color .15s;
+}
+.canto-login:hover {
+  color: var(--insted-text-light);
+  border-color: var(--insted-primary);
+}
+
+.canto-sessao {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.canto-sessao-nome {
+  background: rgba(22, 27, 34, .88);
+  border: 1px solid var(--insted-border);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  color: var(--insted-text-light);
+  font-size: 12px;
+  backdrop-filter: blur(8px);
+}
+
 /* --------------------------------------------------- menu de gestao */
 
 .menu-gestao { position: relative; }

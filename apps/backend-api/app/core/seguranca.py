@@ -28,18 +28,39 @@ _TAMANHO_CHAVE = 32
 _TAMANHO_SALT = 16
 
 
-def gerar_hash_senha(senha: str) -> str:
-    if len(senha) < 8:
-        raise ValueError("A senha precisa ter ao menos 8 caracteres.")
+def _derivar(valor: str) -> str:
+    """Hash scrypt com salt novo, sem opinar sobre o conteudo.
+
+    Separado de gerar_hash_senha porque nem tudo que se guarda em hash e uma
+    senha: o codigo de redefinicao tem 6 digitos de proposito, e a regra de
+    tamanho minimo - que existe para senha escolhida por gente - o rejeitaria.
+    """
     salt = os.urandom(_TAMANHO_SALT)
     chave = hashlib.scrypt(
-        senha.encode("utf-8"), salt=salt, n=_N, r=_R, p=_P, dklen=_TAMANHO_CHAVE
+        valor.encode("utf-8"), salt=salt, n=_N, r=_R, p=_P, dklen=_TAMANHO_CHAVE
     )
     return "$".join([
         "scrypt", str(_N), str(_R), str(_P),
         base64.b64encode(salt).decode(),
         base64.b64encode(chave).decode(),
     ])
+
+
+def gerar_hash_senha(senha: str) -> str:
+    if len(senha) < 8:
+        raise ValueError("A senha precisa ter ao menos 8 caracteres.")
+    return _derivar(senha)
+
+
+def gerar_hash_codigo(codigo: str) -> str:
+    """Hash do codigo de redefinicao.
+
+    Guardar o codigo em texto puro faria de um vazamento do banco uma chave
+    para qualquer conta com pedido aberto. Com hash, quem ler nao redefine
+    senha de ninguem - e a curta validade e o teto de tentativas cuidam do
+    resto.
+    """
+    return _derivar(codigo)
 
 
 def conferir_senha(senha: str, guardado: str) -> bool:
