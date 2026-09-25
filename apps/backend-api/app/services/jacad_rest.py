@@ -269,18 +269,31 @@ class JacadRestClient:
         "identificador nao cadastrado", sem dizer que ha uma pessoa conhecida
         por tras.
 
-        Falha aqui nao derruba a sincronizacao: alunos e professores continuam
-        espelhados, e os funcionarios voltam no proximo ciclo.
+        Traz so os ativos - ver o filtro abaixo. Falha aqui nao derruba a
+        sincronizacao: alunos e professores continuam espelhados, e os
+        funcionarios voltam no proximo ciclo.
         """
         if self._cache_funcionarios is not None:
             return self._cache_funcionarios
 
+        # status=ATIVO filtra na origem, e nao depois de trazer tudo: o
+        # endpoint devolveria tambem quem foi desligado, e essa gente
+        # apareceria no painel como se ainda trabalhasse aqui.
+        #
+        # Com fallback sem o filtro porque `status` esta documentado como
+        # parametro, mas nao confirmado nesta rota - e trazer funcionario
+        # demais e melhor que nao trazer nenhum.
         try:
-            dados = self._todos("/api/v1/basicos/funcionarios")
+            dados = self._todos("/api/v1/basicos/funcionarios", status="ATIVO")
         except Exception as erro:
-            print(f"[jacad] funcionarios indisponiveis: {erro}")
-            self._cache_funcionarios = []
-            return []
+            print(f"[jacad] funcionarios com status=ATIVO falhou ({erro}); "
+                  f"tentando sem filtro")
+            try:
+                dados = self._todos("/api/v1/basicos/funcionarios")
+            except Exception as erro2:
+                print(f"[jacad] funcionarios indisponiveis: {erro2}")
+                self._cache_funcionarios = []
+                return []
 
         if not dados:
             self._cache_funcionarios = []
