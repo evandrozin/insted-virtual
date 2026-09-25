@@ -21,7 +21,13 @@ function Delta({ valor }: { valor: number }) {
  * agora; os cartoes abaixo respondem "por que" essa taxa esta nesse patamar.
  */
 // Rotulo curto por tipo, para caber no rodape do cartao.
+//
+// Todos os rotulos aqui sao de PRESENCA NO PREDIO, nunca de aula. Uma
+// versao anterior mostrava alunos_no_campus como "em aula" e induzia ao
+// erro: esse numero e de quem esta no predio, e quem esta em aula e
+// presentes_em_aula, que tem cartao proprio.
 const ROTULO_TIPO: Record<string, string> = {
+  ALUNO: 'alunos',
   PROFESSOR: 'professores',
   FUNCIONARIO: 'funcionários',
   TERCEIRIZADO: 'terceirizados',
@@ -65,13 +71,10 @@ export const KpiCards: React.FC<Props> = ({ kpis }) => {
           </div>
           <div className="k-foot">
             {kpis.pessoas_no_predio != null
-              ? [
-                  `${kpis.alunos_no_campus} em aula`,
-                  ...Object.entries(kpis.pessoas_por_tipo ?? {})
-                    .filter(([codigo]) => codigo !== 'ALUNO')
-                    .sort((a, b) => b[1] - a[1])
-                    .map(([codigo, n]) => `${n} ${ROTULO_TIPO[codigo] ?? codigo.toLowerCase()}`),
-                ].join(' · ')
+              ? Object.entries(kpis.pessoas_por_tipo ?? {})
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([codigo, n]) => `${n} ${ROTULO_TIPO[codigo] ?? codigo.toLowerCase()}`)
+                  .join(' · ')
               : `${kpis.fluxo_ultima_hora} passagens/1h`}
           </div>
         </div>
