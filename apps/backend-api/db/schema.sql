@@ -313,9 +313,28 @@ select
     -- No fim de proposito: `create or replace view` so aceita colunas novas no
     -- final. Inserir no meio exigiria derrubar a view, e este arquivo precisa
     -- rodar tanto em banco novo quanto no que ja esta em producao.
-    p.turma_nome
+    p.turma_nome,
+    -- CPF MASCARADO. O endpoint que le esta view e publico - o painel de
+    -- leitura nao pede sessao -, entao o numero inteiro nao pode sair daqui.
+    -- Os seis digitos do meio bastam para conferir que o cruzamento com a
+    -- catraca tem com que trabalhar e para distinguir homonimos.
+    --
+    -- O casamento em si nao usa esta coluna: roda no banco, sobre
+    -- pessoa.documento, que nunca trafega.
+    --
+    -- Montado com substr, e nao com backreference de regexp_replace, para
+    -- nao depender de barra invertida: o arquivo passa por editores e
+    -- scripts, e uma referencia numerada ja virou caractere de controle aqui.
+    case
+        when p.documento is null then null
+        else '***.' || substr(doc.d, 4, 3) || '.' || substr(doc.d, 7, 3) || '-**'
+    end as documento
 from pessoa p
-join tipo_pessoa t on t.codigo = p.tipo_codigo;
+join tipo_pessoa t on t.codigo = p.tipo_codigo
+-- Normaliza uma vez so, em vez de repetir a expressao em cada substr.
+left join lateral (
+    select lpad(regexp_replace(p.documento, '[^0-9]', '', 'g'), 11, '0') as d
+) doc on true;
 
 -- O backend acessa por conexao direta, que nao passa por RLS. Habilitar sem
 -- politicas bloqueia leitura anonima pelas APIs REST geradas.

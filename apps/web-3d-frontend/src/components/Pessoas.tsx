@@ -232,6 +232,7 @@ export const Pessoas: React.FC<{ aoFechar: () => void }> = ({ aoFechar }) => {
               <thead>
                 <tr>
                   <th>Identificador</th>
+                  <th>CPF</th>
                   <th>Nome</th>
                   <th>Tipo</th>
                   <th>Turma / Setor</th>
@@ -244,6 +245,14 @@ export const Pessoas: React.FC<{ aoFechar: () => void }> = ({ aoFechar }) => {
                 {visiveis.map((p) => (
                   <tr key={p.identificador}>
                     <td className="mono">{p.identificador}</td>
+                    {/*
+                      Mascarado na origem, na view do banco. Sem CPF a pessoa
+                      so e reconhecida na catraca pelo RA - e os crachas novos
+                      usam CPF, entao a coluna vazia e um aviso, nao um detalhe.
+                    */}
+                    <td className="mono muted">
+                      {p.documento ?? <span className="selo alerta">sem CPF</span>}
+                    </td>
                     <td>{p.nome}</td>
                     <td>
                       <span

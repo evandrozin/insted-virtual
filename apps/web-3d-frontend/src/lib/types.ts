@@ -379,6 +379,12 @@ export interface Pessoa {
   origem: 'JACAD' | 'CATRACA' | 'MANUAL';
   ativo: boolean;
   sincronizado_em: string | null;
+  /**
+   * CPF MASCARADO ("***.345.678-**"). O endpoint e publico, entao o numero
+   * inteiro nunca sai do banco. Serve para conferir que o cruzamento com a
+   * catraca tem com que trabalhar - o casamento em si roda no servidor.
+   */
+  documento: string | null;
   tipo: string;
   tipo_nome: string;
   tipo_plural: string;
